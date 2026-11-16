@@ -20,7 +20,7 @@ linkedin=https://www.linkedin.com/in/elsa-fan-117111222/
 about1=Elsa Fan earned her B.B.A. in Global Business Management & Human Resources from Yuan Ze University, Taiwan.
 about2=She is currently pursuing an M.Sc. in Corporate Communication Management at Pforzheim University, Germany.
 about3=Member of Beta Gamma Sigma, the international business honor society, since 2025, recognizing academic excellence in business studies.
-about4=Outstanding Student Award Recipient, Taiwan Ministry of Education.
+about4=Recipient of the Outstanding Student Award under the Ministry of Education's Overseas Study Program, Taiwan, recognizing her international exchange experience.
 
 phone=+886 965-339-074/+49 176 60866573
 
