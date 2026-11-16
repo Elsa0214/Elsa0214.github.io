@@ -8,7 +8,7 @@ name=Elsa Fan
 
 title1=Corporate Communication & Strategic Marketing Specialist
 
-title2=Taiwan Ministry of Education Outstanding Student Award Recipient | Beta Gamma Sigma Honor Society Member
+title2=Taiwan MOE Outstanding Student Awardee | Beta Gamma Sigma Member
 
 expertise=Corporate & Strategic Communication, Digital Marketing & Brand Management, International Business & Intercultural Communication
 
