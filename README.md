@@ -1,17 +1,10 @@
 # MMI5194 — AI Applications Course Site
 
-This repository is the course website for **MMI5194**, taught by **Prof. Pin Luarn**
-at the **Pforzheim University MBA program**, Winter Term 2026.
+This repository is the personal course website of **Elsa Fan** (Student-ID 331921)
+for **MMI5194 — AI Applications**, Pforzheim University, Winter Term 2026.
 
-The site is hosted on GitHub Pages at **[drluarn.github.io](https://drluarn.github.io/)**
-and serves two purposes:
-
-1. **The instructor's personal/course landing page** — who's teaching the course, the
-   6 weekly unit topics, and each unit's assignment gallery.
-2. **A template every student forks** to build their own personal website as the
-   course's hands-on GitHub Pages exercise. Students only need to edit a couple of
-   plain-text files and drop in their own images — no HTML/CSS/JS editing required
-   for the basic site.
+The site is hosted on GitHub Pages at **[elsa0214.github.io](https://elsa0214.github.io/)**
+and shows my profile, the 6 weekly course units, and my assignment work for each unit.
 
 ---
 
@@ -19,12 +12,12 @@ and serves two purposes:
 
 | Page | URL |
 |---|---|
-| Home / instructor profile | <https://drluarn.github.io/> |
-| Student portfolio directory | <https://drluarn.github.io/student.html> |
-| Unit detail pages | <https://drluarn.github.io/unit.html?unit=1> … `?unit=6` |
-| Perception AI demo hub | <https://drluarn.github.io/perception_demo.html> |
-| MediaPipe "Info Wall" demo | <https://drluarn.github.io/mediapipeCC.html> |
-| Interactive 3D course map | <https://drluarn.github.io/course_islands.html> |
+| Home / profile | <https://elsa0214.github.io/> |
+| Student portfolio directory | <https://elsa0214.github.io/student.html> |
+| Unit detail pages | <https://elsa0214.github.io/unit.html?unit=1> … `?unit=6` |
+| Perception AI demo hub | <https://elsa0214.github.io/perception_demo.html> |
+| MediaPipe "Info Wall" demo | <https://elsa0214.github.io/mediapipeCC.html> |
+| Interactive 3D course map | <https://elsa0214.github.io/course_islands.html> |
 
 ---
 
