@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>331921 Teachable Machine Object Classifier</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<style>
+  :root {
+    --bg: #070b1a;
+    --panel: rgba(16, 22, 44, .78);
+    --line: rgba(120, 160, 255, .28);
+    --text: #eef2ff;
+    --muted: #93a3c8;
+    --accent: #00ffd0;
+    --accent2: #6a8dff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(1200px 600px at 20% -10%, #18225a 0%, transparent 60%),
+                radial-gradient(900px 500px at 110% 110%, #3a1450 0%, transparent 55%),
+                var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif;
+    padding: 28px 16px 40px;
+  }
+  header { text-align: center; margin-bottom: 26px; }
+  h1 {
+    font-size: clamp(24px, 4.5vw, 40px);
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, #00ffd0, #6a8dff, #ff6ad5, #ffd166, #00ffd0);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: flow 8s linear infinite;
+  }
+  @keyframes flow { to { background-position: 300% 0; } }
+  header p { color: var(--muted); margin-top: 8px; font-size: 15px; }
+
+  .wrap {
+    max-width: 1040px; margin: 0 auto;
+    display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px;
+  }
+  @media (max-width: 820px) { .wrap { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    backdrop-filter: blur(6px);
+  }
+  .card h2 { font-size: 16px; letter-spacing: 1px; color: var(--muted); margin-bottom: 14px; font-weight: 600; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tab {
+    flex: 1; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: transparent; color: var(--text);
+    font-size: 15px; cursor: pointer; transition: .15s;
+  }
+  .tab.active { background: linear-gradient(90deg, rgba(0,255,208,.18), rgba(106,141,255,.18)); border-color: var(--accent); }
+
+  .view {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    border-radius: 12px; overflow: hidden;
+    background: #000; border: 2px solid rgba(0,255,220,.45);
+    box-shadow: 0 0 24px rgba(0,255,220,.18);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .view canvas, .view img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .placeholder { color: var(--muted); text-align: center; padding: 20px; line-height: 1.7; }
+
+  .controls { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .btn {
+    padding: 11px 18px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 15px; font-weight: 700; color: #04121a;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  #fileInput { display: none; }
+
+  .top {
+    text-align: center; padding: 18px 10px 22px;
+    border-bottom: 1px solid var(--line); margin-bottom: 18px;
+  }
+  .top .label { font-size: clamp(30px, 6vw, 46px); font-weight: 900; letter-spacing: 2px; }
+  .top .conf { color: var(--muted); margin-top: 4px; font-size: 15px; }
+  .top .emoji { font-size: 44px; display: block; margin-bottom: 4px; }
+
+  .row { margin-bottom: 14px; }
+  .row .head { display: flex; justify-content: space-between; font-size: 15px; margin-bottom: 6px; }
+  .row .head b { font-variant-numeric: tabular-nums; }
+  .bar { height: 12px; border-radius: 6px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0%; border-radius: 6px; transition: width .15s linear; }
+  .row.best .head span { color: #fff; font-weight: 700; }
+
+  .status { margin-top: 16px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .status.err { color: #ff7a8f; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 28px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Teachable Machine Object Classifier</h1>
+  <p>Elsa Fan · 331921 — recognizes <b>Phone</b>, <b>Bottle</b>, <b>AirPods</b> and <b>Mouse</b></p>
+</header>
+
+<div class="wrap">
+  <!-- Input: webcam or uploaded image -->
+  <section class="card">
+    <h2>INPUT</h2>
+    <div class="tabs">
+      <button class="tab active" id="tabCam">📷 Webcam</button>
+      <button class="tab" id="tabImg">🖼️ Upload Image</button>
+    </div>
+
+    <div class="view" id="view">
+      <div class="placeholder" id="placeholder">Loading model…</div>
+    </div>
+
+    <div class="controls" id="camControls">
+      <button class="btn" id="startBtn" disabled>Start Webcam</button>
+      <button class="btn secondary" id="stopBtn" disabled>Stop</button>
+    </div>
+    <div class="controls" id="imgControls" style="display:none">
+      <button class="btn" id="pickBtn" disabled>Choose Image…</button>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="status" id="status">Loading the Teachable Machine model…</div>
+  </section>
+
+  <!-- Output: prediction -->
+  <section class="card">
+    <h2>PREDICTION</h2>
+    <div class="top">
+      <span class="emoji" id="topEmoji">🔍</span>
+      <div class="label" id="topLabel">—</div>
+      <div class="conf" id="topConf">Waiting for input</div>
+    </div>
+    <div id="bars"></div>
+  </section>
+</div>
+
+<footer>
+  Model trained with <a href="https://teachablemachine.withgoogle.com/models/PBnr-4rKq/" target="_blank" rel="noopener">Google Teachable Machine</a>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
+<script>
+  // ===== Model location (your Teachable Machine model) =====
+  const MODEL_URL = "https://teachablemachine.withgoogle.com/models/PBnr-4rKq/";
+
+  // A color + emoji per class, matched by label name
+  const STYLE = {
+    Phone:   { color: "linear-gradient(90deg,#00ffd0,#00b3ff)", emoji: "📱" },
+    Bottle:  { color: "linear-gradient(90deg,#6a8dff,#9d6bff)", emoji: "🍼" },
+    AirPods: { color: "linear-gradient(90deg,#ff6ad5,#ff2d7a)", emoji: "🎧" },
+    Mouse:   { color: "linear-gradient(90deg,#ffd166,#ff8a00)", emoji: "🖱️" },
+  };
+  const MIN_CONFIDENCE = 0.6;   // below this, show "Not sure"
+
+  let model, webcam, labels = [], running = false, rafId = null;
+
+  const $ = id => document.getElementById(id);
+  const view = $("view"), statusEl = $("status");
+
+  function setStatus(msg, isErr = false) {
+    statusEl.textContent = msg;
+    statusEl.className = "status" + (isErr ? " err" : "");
+  }
+
+  function buildBars() {
+    $("bars").innerHTML = labels.map((name, i) => `
+      <div class="row" id="row${i}">
+        <div class="head"><span>${(STYLE[name] || {}).emoji || "•"} ${name}</span><b id="pct${i}">0%</b></div>
+        <div class="bar"><i id="bar${i}" style="background:${(STYLE[name] || {}).color || "#00ffd0"}"></i></div>
+      </div>`).join("");
+  }
+
+  function showPrediction(preds) {
+    let best = preds[0];
+    preds.forEach((p, i) => {
+      const pct = Math.round(p.probability * 100);
+      $("pct" + i).textContent = pct + "%";
+      $("bar" + i).style.width = pct + "%";
+      if (p.probability > best.probability) best = p;
+    });
+    preds.forEach((p, i) => $("row" + i).classList.toggle("best", p === best));
+
+    if (best.probability >= MIN_CONFIDENCE) {
+      $("topLabel").textContent = best.className;
+      $("topEmoji").textContent = (STYLE[best.className] || {}).emoji || "✅";
+      $("topConf").textContent = `Confidence ${(best.probability * 100).toFixed(1)}%`;
+    } else {
+      $("topLabel").textContent = "Not sure";
+      $("topEmoji").textContent = "🤔";
+      $("topConf").textContent = `Best guess: ${best.className} (${(best.probability * 100).toFixed(1)}%)`;
+    }
+  }
+
+  // ===== Load model =====
+  async function init() {
+    try {
+      model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+      labels = model.getClassLabels();
+      buildBars();
+      $("startBtn").disabled = false;
+      $("pickBtn").disabled = false;
+      $("placeholder").innerHTML = "Model ready ✅<br>Click <b>Start Webcam</b> or switch to <b>Upload Image</b>.";
+      setStatus(`Model loaded · ${labels.length} classes: ${labels.join(", ")}`);
+    } catch (err) {
+      console.error(err);
+      $("placeholder").textContent = "Model failed to load.";
+      setStatus("Could not load the model: " + err.message + " — check your internet connection.", true);
+    }
+  }
+
+  // ===== Webcam mode =====
+  async function startWebcam() {
+    $("startBtn").disabled = true;
+    setStatus("Starting webcam… please allow camera access.");
+    try {
+      webcam = new tmImage.Webcam(400, 400, true);   // width, height, flip (mirror)
+      await webcam.setup();
+      await webcam.play();
+      view.innerHTML = "";
+      view.appendChild(webcam.canvas);
+      running = true;
+      $("stopBtn").disabled = false;
+      setStatus("Webcam running — hold an object in front of the camera.");
+      loop();
+    } catch (err) {
+      console.error(err);
+      $("startBtn").disabled = false;
+      setStatus("Camera error: " + err.message + ". Open this page via https:// or localhost and allow camera access.", true);
+    }
+  }
+
+  async function loop() {
+    if (!running) return;
+    webcam.update();
+    const preds = await model.predict(webcam.canvas);
+    showPrediction(preds);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function stopWebcam() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (webcam) { webcam.stop(); webcam = null; }
+    view.innerHTML = '<div class="placeholder">Webcam stopped.</div>';
+    $("startBtn").disabled = false;
+    $("stopBtn").disabled = true;
+    setStatus("Webcam stopped.");
+  }
+
+  // ===== Upload-image mode =====
+  function handleFile(file) {
+    if (!file) return;
+    const img = new Image();
+    img.onload = async () => {
+      view.innerHTML = "";
+      view.appendChild(img);
+      const preds = await model.predict(img);
+      showPrediction(preds);
+      setStatus(`Classified "${file.name}".`);
+    };
+    img.onerror = () => setStatus("That file could not be read as an image.", true);
+    img.src = URL.createObjectURL(file);
+  }
+
+  // ===== Tabs =====
+  function switchTab(mode) {
+    const cam = mode === "cam";
+    $("tabCam").classList.toggle("active", cam);
+    $("tabImg").classList.toggle("active", !cam);
+    $("camControls").style.display = cam ? "" : "none";
+    $("imgControls").style.display = cam ? "none" : "";
+    if (!cam && running) stopWebcam();
+    view.innerHTML = `<div class="placeholder">${cam
+      ? "Click <b>Start Webcam</b> to begin."
+      : "Click <b>Choose Image…</b> to classify a photo."}</div>`;
+  }
+
+  $("startBtn").onclick = startWebcam;
+  $("stopBtn").onclick = stopWebcam;
+  $("pickBtn").onclick = () => $("fileInput").click();
+  $("fileInput").onchange = e => handleFile(e.target.files[0]);
+  $("tabCam").onclick = () => switchTab("cam");
+  $("tabImg").onclick = () => switchTab("img");
+
+  init();
+</script>
+</body>
+</html>
