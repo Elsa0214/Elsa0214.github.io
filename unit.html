@@ -721,7 +721,7 @@
         // Line 1: replaces the unit name normally shown under the image
         // Line 2 (optional): a demo URL, shown on the next line as a clickable link
         function loadImageNote(unitNum, index) {
-            return fetch(`URL/URL${unitNum}_${index}.txt`)
+            return fetch(`URL/URL${unitNum}_${index}.txt`, { cache: 'no-cache' })
                 .then(response => {
                     if (!response.ok) throw new Error("No note file.");
                     return response.text();
