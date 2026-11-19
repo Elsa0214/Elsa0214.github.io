@@ -1,2 +1,2 @@
 Teachable Machine Object Classifier
-https://drluarn.github.io/
+https://elsa0214.github.io/tm_object_classifier.html
