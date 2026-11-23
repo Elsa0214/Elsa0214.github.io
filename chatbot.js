@@ -39,7 +39,7 @@ class ChatBot {
                 position: fixed;
                 bottom: 20px;
                 right: 20px;
-                z-index: 1000;
+                z-index: 2000; /* above Bootstrap's fixed-top navbar (1030) */
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             }
 
@@ -105,6 +105,8 @@ class ChatBot {
                 right: 0;
                 width: 420px;
                 height: 600px;
+                /* never taller than the window: leave room for button + gaps */
+                max-height: calc(100vh - 130px);
                 background: white;
                 border-radius: 24px;
                 box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
@@ -498,7 +500,7 @@ class ChatBot {
                 .chatbot-panel {
                     width: calc(100vw - 30px);
                     height: 70vh;
-                    max-height: 600px;
+                    max-height: min(600px, calc(100vh - 130px));
                     bottom: 100px;
                     right: 15px;
                 }
