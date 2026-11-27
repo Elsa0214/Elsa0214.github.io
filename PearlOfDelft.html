@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>PearlOfDelft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
+<style>
+/* VOICE: quiet, reverent, a museum label beside a living painting.
+   IDEA: the canvas is the page; the interface is a small gilt-and-umber cartouche on the frame.
+   PICTURE: full-bleed WebGL2 scene made only of brush strokes.
+   COLOUR and TYPE: umber glaze #17130e, lead white #efe8d6, lead-tin yellow #e3c25a; Cormorant Garamond.
+   LAYOUT: cartouche top-left, status bottom-right, joystick + jump on touch. */
+:root{color-scheme:dark;--umber:#17130ee0;--lw:#efe8d6;--lty:#e3c25a;--ultra:#3157b5}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:#12160f;overflow:hidden;color:var(--lw);font:16px/1.45 "Cormorant Garamond",Georgia,serif;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+canvas:active{cursor:grabbing}
+#hud{position:fixed;left:max(14px,env(safe-area-inset-left));top:max(14px,env(safe-area-inset-top));background:var(--umber);border:1px solid #e3c25a55;border-radius:3px;padding:12px 16px 12px;max-width:min(360px,calc(100vw - 28px));box-shadow:0 6px 30px #0008}
+#hud h1{margin:0;font-weight:500;font-style:italic;font-size:30px;line-height:1.05;letter-spacing:.2px}
+#hud p{margin:4px 0 10px;font-size:15px;opacity:.8}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+button{font:600 16px/1 "Cormorant Garamond",Georgia,serif;color:var(--lw);background:#2a2219;border:1px solid #e3c25a66;border-radius:22px;min-height:40px;padding:0 16px;cursor:pointer}
+button[aria-pressed=true]{background:#3157b5;border-color:#9fb4e8}
+button:focus-visible{outline:2px solid var(--lty);outline-offset:2px}
+#help{margin-top:10px;font-size:15px;display:none}
+#help.on{display:block}
+#help dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0}
+#help dt{color:var(--lty)}#help dd{margin:0}
+#status{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));font-size:14px;opacity:.75;background:#17130ea0;padding:4px 10px;border-radius:3px;text-align:right;white-space:nowrap}
+#caption{position:fixed;left:50%;bottom:9%;transform:translateX(-50%);font-style:italic;font-size:clamp(20px,3vw,32px);text-shadow:0 2px 12px #000;opacity:0;transition:opacity 1.2s;pointer-events:none;white-space:nowrap}
+#load{position:fixed;inset:0;display:grid;place-items:center;background:#12160f;z-index:10;transition:opacity .8s}
+#load div{text-align:center}#load h2{font-style:italic;font-weight:500;font-size:40px;margin:0 0 6px}
+#bar{width:min(320px,70vw);height:3px;background:#2a2a20;margin:14px auto 0}#bar i{display:block;height:100%;width:0;background:var(--lty)}
+#joy{position:fixed;left:max(22px,env(safe-area-inset-left));bottom:max(26px,env(safe-area-inset-bottom));width:132px;height:132px;border-radius:50%;border:1px solid #efe8d655;background:#17130e66;display:none;touch-action:none}
+#knob{position:absolute;left:41px;top:41px;width:50px;height:50px;border-radius:50%;background:#efe8d6aa}
+#jump{position:fixed;right:max(24px,env(safe-area-inset-right));bottom:max(46px,env(safe-area-inset-bottom));width:84px;height:84px;border-radius:50%;display:none;font-size:18px}
+.touch #joy,.touch #jump{display:block}
+.touch #status{left:50%;right:auto;transform:translateX(-50%);font-size:12px;bottom:max(6px,env(safe-area-inset-bottom))}
+@media(max-width:600px){#hud h1{font-size:24px}#hud p{display:none}#hud{padding:8px 10px}button{min-height:44px;padding:0 12px}}
+@media(prefers-reduced-motion:reduce){#caption,#load{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Painted 3D scene of Delft"></canvas>
+<div id="hud">
+  <h1>PearlOfDelft</h1>
+  <p>Delft, painted stroke by stroke. Every pixel is a brush mark.</p>
+  <div class="row">
+    <button id="bTour" aria-pressed="false">Camera tour</button>
+    <button id="bAuto" aria-pressed="true">Auto-walk</button>
+    <button id="bHelp" aria-expanded="false">Controls</button>
+  </div>
+  <div id="help">
+    <dl id="helpDesk"><dt>W A S D</dt><dd>walk</dd><dt>Shift</dt><dd>run</dd><dt>Space</dt><dd>jump</dd><dt>Drag</dt><dd>turn the view</dd><dt>Wheel</dt><dd>zoom</dd><dt>T</dt><dd>camera tour</dd></dl>
+    <dl id="helpTouch"><dt>Left stick</dt><dd>walk (push far to run)</dd><dt>Jump</dt><dd>jump</dd><dt>Drag</dt><dd>turn the view</dd><dt>Pinch</dt><dd>zoom</dd></dl>
+    <p style="margin:8px 0 0">Stand still for a few seconds and she looks back at you.</p>
+  </div>
+</div>
+<div id="status">…</div>
+<div id="caption"></div>
+<div id="joy"><div id="knob"></div></div>
+<button id="jump" aria-label="Jump">Jump</button>
+<div id="load"><div><h2>PearlOfDelft</h2><div id="lmsg">Grinding pigments…</div><div id="bar"><i></i></div></div></div>
+
+<script type="module">
+{
+// ============================================================ setup
+const $=s=>document.querySelector(s);
+const canvas=$('#c');
+const gl=canvas.getContext('webgl2',{antialias:false,alpha:false,depth:true,stencil:false,powerPreference:'high-performance'});
+const QS=new URLSearchParams(location.search);
+const IS_TOUCH=matchMedia('(pointer:coarse)').matches||/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)||QS.has('mobile');
+if(IS_TOUCH)document.body.classList.add('touch');
+$('#helpDesk').style.display=IS_TOUCH?'none':'grid';$('#helpTouch').style.display=IS_TOUCH?'grid':'none';
+if(!gl){$('#lmsg').textContent='This scene needs WebGL2, which this browser does not provide.';throw new Error('no webgl2');}
+const BUDGET=(+QS.get('budget'))||(IS_TOUCH?420000:1250000);
+const WSP=IS_TOUCH?1.3:1.0;             // woman detail spacing multiplier
+const SKY_N=IS_TOUCH?14000:28000;
+const GRASS_N=IS_TOUCH?170:290;          // grid side
+const WY=-0.55;                          // canal / harbour water level
+
+// ============================================================ math
+let _s=20260127;
+function rnd(){_s|=0;_s=_s+0x6D2B79F5|0;let t=Math.imul(_s^_s>>>15,1|_s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}
+const R=(a,b)=>a+(b-a)*rnd(), pick=a=>a[Math.floor(rnd()*a.length)];
+const A=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],S=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],K=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const D=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],X=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const Ln=a=>Math.hypot(a[0],a[1],a[2]),Nz=a=>{const l=Ln(a)||1;return[a[0]/l,a[1]/l,a[2]/l];};
+const UP=[0,1,0],clamp=(x,a,b)=>x<a?a:x>b?b:x,lerp=(a,b,t)=>a+(b-a)*t,sstep=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+const M4={
+ id(){const m=new Float32Array(16);m[0]=m[5]=m[10]=m[15]=1;return m;},
+ mul(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++){let s=0;for(let k=0;k<4;k++)s+=a[k*4+r]*b[c*4+k];o[c*4+r]=s;}return o;},
+ T(x,y,z){const m=M4.id();m[12]=x;m[13]=y;m[14]=z;return m;},
+ RX(a){const m=M4.id(),c=Math.cos(a),s=Math.sin(a);m[5]=c;m[6]=s;m[9]=-s;m[10]=c;return m;},
+ RY(a){const m=M4.id(),c=Math.cos(a),s=Math.sin(a);m[0]=c;m[2]=-s;m[8]=s;m[10]=c;return m;},
+ RZ(a){const m=M4.id(),c=Math.cos(a),s=Math.sin(a);m[0]=c;m[1]=s;m[4]=-s;m[5]=c;return m;},
+ persp(fy,asp,n,f){const t=1/Math.tan(fy/2),m=new Float32Array(16);m[0]=t/asp;m[5]=t;m[10]=(f+n)/(n-f);m[11]=-1;m[14]=2*f*n/(n-f);return m;},
+ look(e,c,u){const z=Nz(S(e,c)),x=Nz(X(u,z)),y=X(z,x);return Float32Array.of(x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-D(x,e),-D(y,e),-D(z,e),1);},
+ basis(x,y,z,t){return Float32Array.of(x[0],x[1],x[2],0,y[0],y[1],y[2],0,z[0],z[1],z[2],0,t[0],t[1],t[2],1);},
+ pt(m,p){return[m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12],m[1]*p[0]+m[5]*p[1]+m[9]*p[2]+m[13],m[2]*p[0]+m[6]*p[1]+m[10]*p[2]+m[14]];}
+};
+const ch=(...m)=>m.reduce((a,b)=>M4.mul(a,b));
+function h1(n){const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x);}
+function n1(x){const i=Math.floor(x),f=x-i,u=f*f*(3-2*f);return lerp(h1(i),h1(i+1),u);}
+
+// ============================================================ terrain (mirrored in GLSL)
+function groundH(x,z){
+ const ax=Math.abs(x),az=Math.abs(z),m=Math.max(ax,az);
+ if(m>54.5&&m<65.5){const al=ax>az?az:ax;if(al<1.6){const t=(m-54.5)/11;return 0.12+0.75*Math.sin(Math.PI*t);}}
+ if(m>55&&m<65)return -3;
+ if(x>-34&&x<-26&&z>=65&&z<114){if(Math.abs(z-68)<1.8)return 0.25;return -3;}
+ if(z>=114&&z<170&&ax<100){if(ax<2.5)return 0.55;return -3;}
+ if(z>=170&&ax<100&&z<520)return -0.2;
+ if(m<=112||(z>0&&z<114&&ax<112))return 0;
+ if(z<-112&&ax<9)return ax<3?1.2:1.2-(ax-3)/6*1.6;
+ if(m>125&&((x+1000)%40)<2.2&&!(z<-112&&ax<14))return -1.1;
+ return -0.4;
+}
+function waterAt(x,z){
+ const ax=Math.abs(x),az=Math.abs(z),m=Math.max(ax,az);
+ if(m>55&&m<65)return WY;
+ if(x>-34&&x<-26&&z>=65&&z<114)return WY;
+ if(z>=114&&z<170&&ax<100)return WY;
+ if(m>125&&((x+1000)%40)<2.2&&!(z<-112&&ax<14)&&!(z>=114&&ax<100))return -0.8;
+ return null;
+}
+
+// ============================================================ materials
+const MATS=[],MAT={};
+function hex(h){const n=parseInt(h.slice(1),16);return[(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];}
+function mat(name,lit,shd,alpha=.8,imp=0){MAT[name]=MATS.length;MATS.push({lit:hex(lit),shd:hex(shd),alpha,imp});}
+mat('brick','#b4623f','#3b2a1b');mat('brick2','#8f4b39','#2d2119');mat('ochre','#d0a862','#4a3a22');mat('lime','#ece4cf','#5c5946');
+mat('tile','#bb5530','#3d2216');mat('slate','#7d8a96','#252b2f');mat('glass','#9aa69b','#1a201d',.85,.0);mat('frame','#e6ddc6','#4a4436');
+mat('shG','#56704a','#1c2418');mat('shR','#b03b22','#391a12');mat('stone','#aaa28b','#39392f');mat('cobble','#9a8c6e','#332f29',.78);
+mat('pave','#a8684a','#3a281e',.78);mat('water','#6f8a86','#18241f');mat('grass','#8f9b4a','#252f19',.8);mat('grass2','#a6a259','#2b3118',.8);
+mat('leaf','#6f7f3c','#18210f',.8);mat('leaf2','#55643a','#11190c',.8);mat('bark','#6b5a44','#201a14');mat('wood','#8a6438','#2a1e12');
+mat('iron','#4a4a44','#121210',.9,.25);mat('awnY','#dcb84b','#5a4418',.85);mat('awnW','#ebe4cd','#5e5a4a',.85);mat('awnR','#b8472c','#401810',.85);
+mat('delftW','#f3f0e7','#6c6c66',.9,.25);mat('delftB','#2e4f9e','#0f1939',.9,.2);mat('dune','#cdc29c','#7c7862');mat('woods','#68744f','#2a3323');
+mat('horizon','#b8c0b9','#8e9893');mat('chkB','#3a3a35','#0e0f0d',.85,.12);mat('chkW','#ece6d6','#5a5850',.85,.08);mat('map','#c9ad72','#4c3e24',.85);
+mat('mapSea','#8f9b8b','#34382e',.85);mat('easel','#9a7444','#2e2214');mat('carpetR','#a13423','#2c0f0a',.88);mat('carpetB','#2d4a86','#0e1530',.88);
+mat('cowW','#ece6d8','#5a564a');mat('cowB','#4a3a2e','#141010');mat('skin','#eccfaa','#5f5236',.92);mat('turbB','#3158b8','#0e1a49',.82);
+mat('turbY','#e4c35a','#6a5420',.82);mat('jacket','#c49b4e','#3d3018',.82);mat('collar','#f2ede1','#6b695d',.85);mat('skirt','#5b4733','#19130d',.82);
+mat('pearl','#cfd3cf','#3a3e3c',.9);mat('lips','#c8462c','#4a1a12',.9,.0);mat('eye','#2a2018','#0b0907',.92);mat('brow','#5a4028','#1a120a',.6);
+mat('basket','#b18b4c','#3a2c16');mat('wallIn','#d8d0b7','#3b3a2e',.85);mat('wallDark','#3e3d28','#0d0f0b',.88);mat('lead','#3a3c38','#101210',.92);
+mat('winBright','#f4f1de','#c4c6b3',.92,.15);mat('millWood','#5c4a36','#1a1410');mat('sail','#d8ccb0','#4e4636',.8);mat('road','#b5a073','#4a4030');
+mat('brass','#d7b159','#3a2a10',.9,.35);mat('eyeW','#e6ded0','#5a5448',.9);mat('copper','#6f9a86','#1e2e28');mat('blush','#e9b597','#5f4030',.35);
+mat('door','#3e4a33','#121710');mat('tar','#2e2a24','#0b0a08');mat('cheese','#e2b545','#5a4012',.88,.1);mat('cabbage','#7d9a4a','#1d2b12',.85);
+mat('dark','#2a241b','#0b0a08',.92);mat('hay','#c3ad6a','#4c4224',.8);mat('sand','#c7b48a','#4a4230');
+const NMAT=64;
+
+// ============================================================ stroke storage
+// record: pos f32x3 | nrm i8x4 | tan i8x4 | size u16x2 (len,wid /12m) | mat,bone,flags,seed u8 | rankHi,rankLo,ao,jit u8
+const STRIDE=32;
+class Layer{
+ constructor(cap){this.n=0;this.buf=null;this.alloc(cap);}
+ alloc(cap){const nb=new ArrayBuffer(cap*STRIDE);if(this.buf)new Uint8Array(nb).set(new Uint8Array(this.buf,0,this.n*STRIDE));this.buf=nb;this.cap=cap;this.f=new Float32Array(nb);this.i8=new Int8Array(nb);this.u16=new Uint16Array(nb);this.u8=new Uint8Array(nb);}
+ push(p,n,t,len,wid,mat,bone,fl,ao,jit){
+  if(this.n>=this.cap)this.alloc(Math.ceil(this.cap*1.6));
+  const i=this.n++,b=i*STRIDE,f=this.f,q=this.i8,u=this.u8,w=this.u16;
+  f[i*8]=p[0];f[i*8+1]=p[1];f[i*8+2]=p[2];
+  q[b+12]=clamp(n[0],-1,1)*127;q[b+13]=clamp(n[1],-1,1)*127;q[b+14]=clamp(n[2],-1,1)*127;
+  q[b+16]=clamp(t[0],-1,1)*127;q[b+17]=clamp(t[1],-1,1)*127;q[b+18]=clamp(t[2],-1,1)*127;
+  w[(b+20)>>1]=Math.min(65535,len*5461.25)|0;w[(b+22)>>1]=Math.min(65535,wid*5461.25)|0;
+  u[b+24]=mat;u[b+25]=bone;u[b+26]=fl;u[b+27]=(rnd()*256)|0;
+  const r=rnd()*256,hi=r|0;u[b+28]=hi;u[b+29]=((r-hi)*256)|0;u[b+30]=clamp(ao,0,1)*255;u[b+31]=jit*255;
+ }
+}
+const LU=new Layer(1<<20),LRG=new Layer(1<<17),LG=new Layer(1<<20),LW=new Layer(1<<17),LI=new Layer(1<<15),LS=new Layer(1<<15);
+// flags
+const F_REFL=1,F_DBL=2,F_PEARL=4,F_HAZE=8,F_INT=16,F_TWINKLE=32;
+let C={bone:0,flags:0,refl:false,tj:.35,noUnder:false};
+function put(L,p,n,t,len,wid,mat,ao=1,fl=C.flags){L.push(p,n,t,len,wid,mat,C.bone,fl,ao,rnd());}
+function rotT(t,b,a){const c=Math.cos(a),s=Math.sin(a);return[t[0]*c+b[0]*s,t[1]*c+b[1]*s,t[2]*c+b[2]*s];}
+function ortho(t,n){const d=D(t,n);let o=[t[0]-n[0]*d,t[1]-n[1]*d,t[2]-n[2]*d];if(Ln(o)<1e-4)o=Math.abs(n[1])<.9?X(UP,n):[1,0,0];return Nz(o);}
+// one painted sample = underpainting + 1-2 glazes (+ reflection copies) + rare impasto bead
+function emitSample(p,n,t,sp,mat,ao=1){
+ const m=MATS[mat],fl=C.flags,tj=C.tj;t=ortho(t,n);const b=X(n,t);
+ if(!C.noUnder){const tt=rotT(t,b,R(-tj*.6,tj*.6)),L=sp*R(2.6,3.1),W=sp*R(1.85,2.2);put(LU,p,n,tt,L,W,mat,ao);if(C.refl)put(LU,p,n,tt,L,W,mat,ao,fl|F_REFL);}
+ const ng=C.ng||(rnd()<.5?2:1);
+ for(let k=0;k<ng;k++){const q=A(p,A(K(t,R(-.4,.4)*sp),K(b,R(-.4,.4)*sp))),tt=rotT(t,b,R(-tj,tj)),L=sp*R(1.5,2.2),W=sp*R(.8,1.12);
+  put(LG,q,n,tt,L,W,mat,ao);if(C.refl)put(LRG,q,n,tt,L,W,mat,ao,fl|F_REFL);}
+ if(m.imp>0&&rnd()<m.imp)put(LI,p,n,t,sp*R(.22,.4),sp*R(.22,.4),mat,ao);
+}
+// feature stroke: a deliberate single mark (window pane, frame, hoop...)
+function feat(L,p,n,t,len,wid,mat,ao=1){t=ortho(t,n);put(L,p,n,t,len,wid,mat,ao);if(C.refl&&(L===LU||L===LG))put(L===LU?LU:LRG,p,n,t,len,wid,mat,ao,C.flags|F_REFL);}
+
+// ---- job system: areas are summed, then one base spacing is chosen to hit the stroke budget
+const jobs=[];let units=0;
+function J(area,rel,fn){units+=area/(rel*rel)*(C.refl?2:1)*(C.um||1);jobs.push({rel,fn,ctx:{...C}});}
+function J0(fn){jobs.push({rel:0,fn,ctx:{...C}});}
+const wallAO=p=>.6+.4*Math.min(1,Math.max(0,p[1])/5);
+function sRect(o,U,V,N,sp,m,opt={}){
+ const lu=Ln(U),lv=Ln(V),nu=Math.max(1,Math.round(lu/sp)),nv=Math.max(1,Math.round(lv/sp)),t=Nz(opt.tv?V:U),fn=typeof m==='function';
+ for(let i=0;i<nu;i++)for(let j=0;j<nv;j++){const u=(i+rnd())/nu,v=(j+rnd())/nv;const mm=fn?m(u*lu,v*lv):m;if(mm<0)continue;
+  const p=[o[0]+U[0]*u+V[0]*v,o[1]+U[1]*u+V[1]*v,o[2]+U[2]*u+V[2]*v];emitSample(p,N,t,sp,mm,opt.aoF?opt.aoF(p,u,v):1);}
+}
+function rect(o,U,V,N,m,opt={}){const rel=opt.rel||1;J(Ln(U)*Ln(V),rel,sp=>sRect(o,U,V,N,sp,m,opt));}
+function sTri(a,b,c,N,sp,m,opt={}){
+ const U=S(b,a),V=S(c,a),lu=Ln(U),lv=Ln(V),nu=Math.max(1,Math.round(lu/sp)),nv=Math.max(1,Math.round(lv/sp)),t=Nz(U);
+ for(let i=0;i<nu;i++)for(let j=0;j<nv;j++){const u=(i+rnd())/nu,v=(j+rnd())/nv;if(u+v>1)continue;
+  const p=[a[0]+U[0]*u+V[0]*v,a[1]+U[1]*u+V[1]*v,a[2]+U[2]*u+V[2]*v];emitSample(p,N,t,sp,m,opt.aoF?opt.aoF(p):1);}
+}
+function tri(a,b,c,N,m,opt={}){J(Ln(X(S(b,a),S(c,a)))/2,opt.rel||1,sp=>sTri(a,b,c,N,sp,m,opt));}
+// truncated cone / cylinder around +y
+function sCyl(c,r0,r1,h,sp,m,o={}){
+ const a0=o.a0??0,a1=o.a1??Math.PI*2,rm=(r0+r1)/2,sl=Math.hypot(h,r0-r1),nu=Math.max(3,Math.round(rm*(a1-a0)/sp)),nv=Math.max(1,Math.round(sl/sp)),slope=(r0-r1)/h,fn=typeof m==='function';
+ for(let i=0;i<nu;i++)for(let j=0;j<nv;j++){const u=(i+rnd())/nu,v=(j+rnd())/nv,a=a0+(a1-a0)*u,r=r0+(r1-r0)*v,ca=Math.cos(a),sa=Math.sin(a);
+  const mm=fn?m(a,v*h):m;if(mm<0)continue;let n=Nz([ca,slope,sa]);if(o.inward)n=K(n,-1);
+  const p=[c[0]+ca*r,c[1]+v*h,c[2]+sa*r];const t=o.tv===false?[-sa,0,ca]:Nz([ca*(r1-r0),h,sa*(r1-r0)]);
+  emitSample(p,n,t,sp,mm,o.aoF?o.aoF(p,v):1);}
+}
+function cyl(c,r0,r1,h,m,o={}){J(Math.PI*(r0+r1)*Math.hypot(h,r0-r1)*((o.a1??6.2832)-(o.a0??0))/6.2832,o.rel||1,sp=>sCyl(c,r0,r1,h,sp,m,o));}
+function ellArea(a,b,c){const p=1.6075;return 4*Math.PI*Math.pow((Math.pow(a*b,p)+Math.pow(a*c,p)+Math.pow(b*c,p))/3,1/p);}
+function sEll(c,rad,sp,m,o={}){
+ const N=Math.max(8,Math.round(ellArea(rad[0],rad[1],rad[2])/(sp*sp))),fn=typeof m==='function';
+ for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,rr=Math.sqrt(Math.max(0,1-y*y)),ph=i*2.399963+rnd()*.5;
+  const d=[rr*Math.cos(ph),y,rr*Math.sin(ph)];if(o.cut&&o.cut(d))continue;
+  const mm=fn?m(d):m;if(mm<0)continue;
+  const p=[c[0]+d[0]*rad[0],c[1]+d[1]*rad[1],c[2]+d[2]*rad[2]],n=Nz([d[0]/rad[0],d[1]/rad[1],d[2]/rad[2]]);
+  let t=Math.abs(n[1])>.97?[1,0,0]:Nz(X(UP,n));if(o.lon)t=X(n,t);if(o.tdir)t=o.tdir(d,n);
+  emitSample(p,n,t,sp,mm,o.aoF?o.aoF(d,p):1);}
+}
+function ell(c,rad,m,o={}){J(ellArea(rad[0],rad[1],rad[2]),o.rel||1,sp=>sEll(c,rad,sp,m,o));}
+function sDisk(c,r,N,sp,m,o={}){const n=Math.max(4,Math.round(Math.PI*r*r/(sp*sp))),t0=Math.abs(N[1])>.9?[1,0,0]:Nz(X(UP,N)),b0=X(N,t0),fn=typeof m==='function';
+ for(let i=0;i<n;i++){const rr=r*Math.sqrt((i+.5)/n),a=i*2.399963;const lx=Math.cos(a)*rr,ly=Math.sin(a)*rr;const mm=fn?m(lx,ly,rr/r):m;if(mm<0)continue;
+  emitSample(A(c,A(K(t0,lx),K(b0,ly))),N,o.radial?A(K(t0,Math.cos(a)),K(b0,Math.sin(a))):t0,sp,mm,1);}}
+function disk(c,r,N,m,o={}){J(Math.PI*r*r,o.rel||1,sp=>sDisk(c,r,N,sp,m,o));}
+// axis-aligned box faces
+function boxS(x0,y0,z0,x1,y1,z1,m,o={}){
+ const faces=o.faces||'nsewt',dx=x1-x0,dy=y1-y0,dz=z1-z0,mm=f=>typeof m==='object'?(m[f]??m.d):m;
+ if(faces.includes('s'))rect([x0,y0,z1],[dx,0,0],[0,dy,0],[0,0,1],mm('s'),o);
+ if(faces.includes('n'))rect([x1,y0,z0],[-dx,0,0],[0,dy,0],[0,0,-1],mm('n'),o);
+ if(faces.includes('e'))rect([x1,y0,z1],[0,0,-dz],[0,dy,0],[1,0,0],mm('e'),o);
+ if(faces.includes('w'))rect([x0,y0,z0],[0,0,dz],[0,dy,0],[-1,0,0],mm('w'),o);
+ if(faces.includes('t'))rect([x0,y1,z1],[dx,0,0],[0,0,-dz],[0,1,0],mm('t'),o);
+ if(faces.includes('b'))rect([x0,y0,z0],[dx,0,0],[0,0,dz],[0,-1,0],mm('b'),o);
+}
+
+// ============================================================ collision + occupancy
+const BOX=[];
+function box(x0,y0,z0,x1,y1,z1,o={}){BOX.push({x0:Math.min(x0,x1),y0,z0:Math.min(z0,z1),x1:Math.max(x0,x1),y1,z1:Math.max(z0,z1),cam:o.cam!==false,jump:!!o.jump});}
+const OCC=new Uint8Array(240*240);
+function occ(x0,z0,x1,z1){for(let x=Math.ceil(Math.min(x0,x1)+120);x<Math.max(x0,x1)+120;x++)for(let z=Math.ceil(Math.min(z0,z1)+120);z<Math.max(z0,z1)+120;z++)if(x>=0&&z>=0&&x<240&&z<240)OCC[z*240+x]=1;}
+function isOcc(x,z){const ix=Math.floor(x+120),iz=Math.floor(z+120);return ix>=0&&iz>=0&&ix<240&&iz<240&&OCC[iz*240+ix]===1;}
+
+// ============================================================ houses
+const rOf=f=>[f[2],0,-f[0]];
+function winLayout(w,h){const cols=Math.max(1,Math.round(w/1.75)),floors=Math.max(2,Math.floor(h/3)),fh=h/floors,cw=w/cols;return{cols,floors,fh,cw,ww:Math.min(.6,cw*.33),wb:.75,wt:fh-.45};}
+function inOpening(lu,lv,L,st){
+ const fl=Math.floor(lv/L.fh),fy=lv-fl*L.fh,ci=Math.floor(lu/L.cw),cx=lu-(ci+.5)*L.cw;
+ if(fl===0&&st.shop&&Math.abs(lu-st.w/2)<st.w*.36&&fy<2.9)return true;
+ if(fl===0&&ci===Math.floor(L.cols/2))return Math.abs(cx)<.6&&fy<2.4;
+ return Math.abs(cx)<L.ww+.05&&fy>L.wb-.05&&fy<L.wt+.05;
+}
+function gableHW(w,gh,g,lv){
+ if(g===0){const k=Math.floor(lv/gh*4);return w/2*(1-k/4)*.98;}
+ if(g===1)return w/2*(1-lv/gh);
+ const a=gh*.2,b=gh*.65;return lv<a?w/2*(1-lv/a*.45):lv<b?w*.275:w*.275*(1-(lv-b)/(gh-b));
+}
+function windowF(c,r,n,ww,wh,st,lattice){
+ const p0=A(c,K(n,.02)),fw=Math.max(.07,ww*.1);
+ feat(LU,p0,n,UP,wh*1.04,ww*1.08,MAT.glass,.8);
+ for(let i=0;i<2;i++)for(let j=0;j<2;j++)feat(LG,A(p0,A(K(r,(i-.5)*ww*.5),K(UP,(j-.5)*wh*.5))),n,UP,wh*.6,ww*.6,MAT.glass,.9);
+ if(lattice)for(let k=-2;k<=2;k++){feat(LG,A(p0,K(r,k*ww*.22)),n,Nz(A(UP,K(r,.5))),wh*.9,.025,MAT.lead);feat(LG,A(p0,K(r,k*ww*.22)),n,Nz(A(UP,K(r,-.5))),wh*.9,.025,MAT.lead);}
+ feat(LG,A(p0,K(r,-ww/2)),n,UP,wh*1.05,fw,MAT.frame);feat(LG,A(p0,K(r,ww/2)),n,UP,wh*1.05,fw,MAT.frame);
+ feat(LG,A(p0,K(UP,wh/2)),n,r,ww*1.12,fw,MAT.frame);feat(LG,A(p0,K(UP,-wh/2)),n,r,ww*1.15,fw*1.4,MAT.frame);
+ feat(LG,p0,n,UP,wh,fw*.75,MAT.frame);feat(LG,A(p0,K(UP,wh*.12)),n,r,ww,fw*.75,MAT.frame);
+ if(st.sh>=0){feat(LG,A(p0,K(r,-ww*.82)),n,UP,wh*.95,ww*.55,st.sh);feat(LG,A(p0,K(r,ww*.82)),n,UP,wh*.95,ww*.55,st.sh);}
+ if(rnd()<.6)put(LI,A(p0,A(K(r,-ww*.22),K(UP,wh*.22))),n,UP,.07,.07,MAT.glass);
+}
+function house(c,f,w,d,h,st){
+ st.w=w;const r=rOf(f),o=S(c,K(r,w/2)),H=[0,h,0],L=winLayout(w,h);
+ const gh=st.g===0?Math.min(6,w*.8):st.g===1?w*.6:w*.75;
+ const keep=C.refl;C.refl=!!st.refl;
+ rect(o,K(r,w),H,f,(lu,lv)=>inOpening(lu,lv,L,st)?-1:st.wall,{rel:st.rel,aoF:wallAO});
+ rect(A(o,H),K(r,w),[0,gh,0],f,(lu,lv)=>{const x=Math.abs(lu-w/2);if(x>gableHW(w,gh,st.g,lv))return -1;if(lv>gh*.22&&lv<gh*.45&&x<.35)return -1;return st.wall;},{rel:st.rel});
+ const ov=.35,k=gh/(w/2),eY=h-ov*k,back=K(f,-(d+.3));
+ rect(A(A(S(c,K(r,w/2+ov)),[0,eY,0]),K(f,.15)),back,A(K(r,w/2+ov),[0,gh+ov*k,0]),Nz(A(K(r,-gh),[0,w/2,0])),st.roof,{rel:st.rel*1.3,tv:true});
+ rect(A(A(A(c,K(r,w/2+ov)),[0,eY,0]),K(f,.15)),back,A(K(r,-(w/2+ov)),[0,gh+ov*k,0]),Nz(A(K(r,gh),[0,w/2,0])),st.roof,{rel:st.rel*1.3,tv:true});
+ C.refl=false;
+ const bk=K(f,-d);
+ if(st.nL<h)rect(A(o,bk),K(f,d),H,K(r,-1),(lu,lv)=>lv<st.nL?-1:st.wall,{rel:1.5,aoF:wallAO});
+ if(st.nR<h)rect(A(c,K(r,w/2)),K(f,-d),H,r,(lu,lv)=>lv<st.nR?-1:st.wall,{rel:1.5,aoF:wallAO});
+ const oB=A(A(c,K(r,w/2)),bk);
+ rect(oB,K(r,-w),H,K(f,-1),st.wall,{rel:1.6,aoF:wallAO});
+ tri(A(oB,H),A(A(oB,H),K(r,-w)),A(A(c,bk),[0,h+gh,0]),K(f,-1),st.wall,{rel:1.6});
+ J0(()=>{
+  C.refl=!!st.refl;
+  for(let fl=0;fl<L.floors;fl++)for(let ci=0;ci<L.cols;ci++){
+   const lu=(ci+.5)*L.cw,base=A(o,K(r,lu));
+   if(fl===0&&st.shop){if(ci===0){const pc=A(A(o,K(r,w/2)),[0,1.45,0]);feat(LU,A(pc,K(f,.02)),f,r,w*.72,2.9,MAT.dark,.4);for(let s=0;s<3;s++)feat(LG,A(pc,A(K(f,.03),[0,-.9+s*.75,0])),f,r,w*.66,.07,MAT.wood,.6);
+     for(let q=0;q<26;q++){const pp=A(A(pc,K(r,R(-w*.32,w*.32))),[0,-.75+Math.floor(rnd()*3)*.75+.18,0]);feat(LG,A(pp,K(f,.05)),f,UP,R(.16,.3),R(.08,.13),rnd()<.5?MAT.delftW:MAT.delftB,.9);}}continue;}
+   if(fl===0&&ci===Math.floor(L.cols/2)){const dc=A(base,[0,1.2,0]);feat(LU,A(dc,K(f,.02)),f,UP,2.4,1.25,MAT.door,.7);feat(LG,A(dc,K(f,.03)),f,UP,2.3,.55,MAT.door);feat(LG,A(A(dc,K(f,.03)),K(r,.3)),f,UP,2.3,.55,MAT.door);
+    feat(LG,A(A(base,[0,.08,0]),K(f,.35)),UP,r,1.6,.6,MAT.stone);feat(LG,A(dc,A(K(f,.04),[0,1.25,0])),f,r,1.35,.12,MAT.lime);continue;}
+   windowF(A(base,[0,fl*L.fh+(L.wb+L.wt)/2,0]),r,f,L.ww*2,L.wt-L.wb,st,false);
+  }
+  for(let fl=1;fl<L.floors;fl++)for(let x=.4;x<w;x+=1.5)feat(LG,A(A(o,K(r,x+.35)),[0,fl*L.fh+.06,0]),f,r,1.6,.16,st.band,.9);
+  feat(LG,A(A(o,K(f,.03)),[0,h/2,0]),f,UP,h,.14,MAT.brick2,.5);
+  for(let lv=.25;lv<gh;lv+=.5){const hw=gableHW(w,gh,st.g,lv),hw2=gableHW(w,gh,st.g,lv+.25),dt=Nz([hw2-hw,.25,0]);
+   for(const s of[-1,1]){const p=A(A(o,K(r,w/2+s*hw)),[0,h+lv,0]);const t=A(K(r,s*dt[0]),[0,dt[1],0]);feat(LG,A(p,K(f,.04)),f,t,.6,.16,MAT.lime,.9);}}
+  windowF(A(A(o,K(r,w/2)),[0,h+gh*.335,0]),r,f,.6,gh*.2,{sh:-1},false);
+  C.refl=false;
+  const bo=A(o,bk);for(let fl=1;fl<L.floors;fl++)for(let ci=0;ci<L.cols;ci+=2){windowF(A(A(bo,K(r,(ci+.5)*L.cw)),[0,fl*L.fh+(L.wb+L.wt)/2,0]),K(r,-1),K(f,-1),L.ww*2,L.wt-L.wb,{sh:-1},false);}
+ });
+ const e1=A(c,K(r,-w/2)),e2=A(A(c,K(r,w/2)),bk);occ(e1[0],e1[2],e2[0],e2[2]);box(e1[0],0,e1[2],e2[0],h+gh,e2[2]);
+ C.refl=keep;
+}
+function row(a,b,f,d,o){
+ const r=rOf(f);let P0=[a[0],0,a[1]],P1=[b[0],0,b[1]];if(D(S(P1,P0),r)<0){const t=P0;P0=P1;P1=t;}
+ const Lr=Ln(S(P1,P0)),hs=[];let s=0;
+ while(s<Lr-2.5){let w=R(5,7.8);if(Lr-s-w<4.5)w=Lr-s;const c=A(P0,K(r,s+w/2));
+  if(o.skip&&o.skip(c[0],c[2],w)){hs.push(null);s+=w;continue;}hs.push({c,w,h:R(o.h0||8,o.h1||13)});s+=w;}
+ hs.forEach((H,i)=>{if(!H)return;const pv=hs[i-1],nx=hs[i+1];
+  const st={refl:o.refl,rel:o.rel||1,wall:pick([MAT.brick,MAT.brick,MAT.brick2,MAT.brick,MAT.ochre,MAT.brick2,MAT.brick]),roof:rnd()<.82?MAT.tile:MAT.slate,
+   g:pick([0,0,1,2,0,1]),sh:rnd()<.35?pick([MAT.shG,MAT.shR,MAT.shG]):-1,band:MAT.lime,nL:pv?Math.min(pv.h,H.h):0,nR:nx?Math.min(nx.h,H.h):0,shop:!!(o.shop&&o.shop(H.c))};
+  house(H.c,f,H.w,d,H.h,st);});
+}
+
+// ============================================================ world
+const OBST=[];   // jumpable obstacles (for auto-jump)
+function barrel(x,z,h=.72,r=.33,rel=.5){const y=groundH(x,z);cyl([x,y,z],r*.9,r,h/2,MAT.wood,{rel});cyl([x,y+h/2,z],r,r*.9,h/2,MAT.wood,{rel});disk([x,y+h,z],r*.9,UP,MAT.wood,{rel});
+ J0(()=>{for(const hh of[.12,.5,.88])for(let a=0;a<6.28;a+=.55){const n=[Math.cos(a),0,Math.sin(a)];feat(LG,[x+n[0]*r*1.01,y+h*hh,z+n[2]*r*1.01],n,[-n[2],0,n[0]],.25,.045,MAT.iron);}});
+ box(x-r,y,z-r,x+r,y+h,z+r,{jump:true,cam:false});}
+function crate(x,z,s=.62,rel=.5){const y=groundH(x,z);boxS(x-s/2,y,z-s/2,x+s/2,y+s,z+s/2,MAT.wood,{rel});
+ J0(()=>{for(const [n,t] of[[[0,0,1],[1,0,0]],[[1,0,0],[0,0,1]],[[0,0,-1],[1,0,0]],[[-1,0,0],[0,0,1]]]){const c=[x+n[0]*s*.505,y+s/2,z+n[2]*s*.505];feat(LG,c,n,Nz(A(t,UP)),s*1.3,.05,MAT.dark,.7);feat(LG,A(c,[0,s*.45,0]),n,t,s,.05,MAT.dark,.7);}});
+ box(x-s/2,y,z-s/2,x+s/2,y+s,z+s/2,{jump:true,cam:false});}
+function tree(x,z,s=1,rel=1.5,poplar=false){
+ const y=groundH(x,z);cyl([x,y,z],.26*s,.18*s,4.2*s,MAT.bark,{rel:rel*.7});box(x-.3,y,z-.3,x+.3,y+4,z+.3,{cam:false});
+ const prev=C.tj;C.tj=3.1;const blobs=[];
+ const nb=poplar?2:3;for(let i=0;i<nb;i++){const c=poplar?[x+R(-.4,.4),y+(5.5+i*3.4)*s,z+R(-.4,.4)]:[x+R(-1.6,1.6)*s,y+R(4.6,7.4)*s,z+R(-1.6,1.6)*s];const rr=poplar?[1.5*s,3.4*s,1.5*s]:[R(2.1,2.9)*s,R(1.8,2.5)*s,R(2.1,2.9)*s];blobs.push([c,rr]);}
+ blobs.forEach(([c,rr],i)=>ell(c,rr,i%2?MAT.leaf2:MAT.leaf,{rel,aoF:d=>.45+.55*(d[1]*.5+.5),cut:d=>{const p=[c[0]+d[0]*rr[0],c[1]+d[1]*rr[1],c[2]+d[2]*rr[2]];return blobs.some(([c2,r2],j)=>j!==i&&((p[0]-c2[0])/r2[0])**2+((p[1]-c2[1])/r2[1])**2+((p[2]-c2[2])/r2[2])**2<.8);}}));
+ C.tj=prev;
+}
+// ---- canal ring houses
+const CL=(x,z)=>x; // placeholder for readability
+row([-49,-49],[49,-49],[0,0,-1],12,{refl:true,rel:.62,skip:(x,z,w)=>Math.abs(x)<3+w/2});
+row([-49,49],[49,49],[0,0,1],12,{refl:true,rel:.62,skip:(x,z,w)=>Math.abs(x)<3+w/2});
+row([49,-37],[49,37],[1,0,0],12,{refl:true,rel:.62,skip:(x,z,w)=>Math.abs(z)<3+w/2});
+row([-49,-37],[-49,37],[-1,0,0],12,{refl:true,rel:.62,skip:(x,z,w)=>Math.abs(z)<3+w/2});
+row([-83,-71],[83,-71],[0,0,1],12,{refl:true,rel:.85,skip:(x,z,w)=>Math.abs(x)<3+w/2});
+row([-83,71],[83,71],[0,0,-1],12,{refl:true,rel:.85,skip:(x,z,w)=>Math.abs(x)<3+w/2||Math.abs(x+30)<4.5+w/2});
+row([71,-71],[71,71],[-1,0,0],12,{refl:true,rel:.85,skip:(x,z,w)=>Math.abs(z)<3+w/2});
+row([-71,-71],[-71,71],[1,0,0],12,{refl:true,rel:.85,skip:(x,z,w)=>Math.abs(z)<3+w/2});
+// ---- market square rows (pottery shop on the east side)
+row([-20,22],[20,22],[0,0,-1],10,{rel:.85,h0:9,h1:12});
+row([22,-20],[22,20],[-1,0,0],10,{rel:.85,h0:9,h1:12,shop:c=>Math.abs(c[2])<4});
+row([-22,-20],[-22,20],[1,0,0],10,{rel:.85,h0:9,h1:12});
+// ---- harbour-front row behind the wall
+row([-95,107],[95,107],[0,0,1],9,{refl:true,rel:1.0,h0:11,h1:15,skip:(x,z,w)=>Math.abs(x)<12+w/2||Math.abs(x+30)<5+w/2});
+
+// ---- ground: town tiles
+function groundMat(x,z){
+ const ax=Math.abs(x),az=Math.abs(z),m=Math.max(ax,az);
+ if(ax<22&&az<22)return((Math.floor(x/.9)+Math.floor(z/.45))&3)===0?MAT.brick2:MAT.pave;
+ if((m>53.6&&m<55)||(m>65&&m<66.4))return MAT.stone;
+ if(m>86&&m<108&&!(z>95&&z<108.5&&ax<100)&&ax>4&&az>4)return MAT.grass;
+ return MAT.cobble;
+}
+for(let tx=-112;tx<112;tx+=8)for(let tz=-112;tz<114;tz+=8){
+ const cx=tx+4,cz=tz+4,m=Math.max(Math.abs(cx),Math.abs(cz));
+ const rel=(m>48&&m<57)||(m>63&&m<72)?.8:m<24?.75:1.35;
+ J(64,rel,sp=>{const n=Math.max(1,Math.round(8/sp));for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+  const x=tx+(i+rnd())*8/n,z=tz+(j+rnd())*8/n;if(z>114)continue;
+  if(waterAt(x,z)!==null||isOcc(x,z))continue;
+  if(x>-34&&x<-24&&z>24&&z<36)continue; if(x>24&&x<36&&z>-36&&z<-24)continue;
+  const y=groundH(x,z);const ax=Math.abs(x),az=Math.abs(z);
+  emitSample([x,y,z],UP,ax>az&&Math.max(ax,az)>40?[0,0,1]:[1,0,0],sp,groundMat(x,z),R(.85,1));}});
+}
+// ---- polder, south bank and far fields
+for(let tx=-520;tx<520;tx+=16)for(let tz=-520;tz<520;tz+=16){
+ const cx=tx+8,cz=tz+8;if(Math.max(Math.abs(cx),Math.abs(cz))<104&&cz<104)continue;
+ const d=Math.hypot(cx,cz);let rel=1.5*(1+Math.max(0,d-112)/85);if(Math.abs(cx)<20&&cz<-104&&cz>-300)rel=Math.min(rel,.9+Math.max(0,-cz-112)/140);if(cz>104&&cz<240&&Math.abs(cx)<110)rel=Math.min(rel,1.3);
+ J(256,rel,sp=>{const nn=Math.max(1,Math.round(16/sp));for(let i=0;i<nn;i++)for(let j=0;j<nn;j++){
+  const x=tx+(i+rnd())*16/nn,z=tz+(j+rnd())*16/nn,ax=Math.abs(x),az=Math.abs(z),m=Math.max(ax,az);
+  if(m<=112||(z>0&&z<114&&ax<112))continue;if(waterAt(x,z)!==null)continue;
+  const y=groundH(x,z);if(y<-1)continue;
+  let mt,t=[0,0,1],n=UP;
+  if(z<-112&&ax<9){if(ax<3){mt=MAT.road;}else{mt=MAT.grass;n=Nz([Math.sign(x)*.27,1,0]);}}
+  else{const fx=Math.floor((x+1000)/40),fz=Math.floor((z+1000)/70),hh=h1(fx*13+fz*7);mt=hh<.5?MAT.grass:hh<.82?MAT.grass2:MAT.hay;if(z>=170&&ax<100)mt=MAT.grass;t=hh<.5?[0,0,1]:[1,0,0];}
+  emitSample([x,y,z],n,t,sp,mt,1);}});
+}
+// ---- water surfaces
+function waterJob(x0,z0,x1,z1,rel){J((x1-x0)*(z1-z0)*.45,rel,sp=>{const nx=Math.max(1,Math.round((x1-x0)/sp)),nz=Math.max(1,Math.round((z1-z0)/sp));
+ for(let i=0;i<nx;i++)for(let j=0;j<nz;j++){const x=x0+(i+rnd())*(x1-x0)/nx,z=z0+(j+rnd())*(z1-z0)/nz;const wl=waterAt(x,z);if(wl===null)continue;
+  const ax=Math.abs(x),az=Math.abs(z);let t=[1,0,0];if(Math.max(ax,az)>55&&Math.max(ax,az)<65&&ax>az)t=[0,0,1];if(x>-34&&x<-26&&z>65&&z<114)t=[0,0,1];if(wl<-.7)t=[0,0,1];
+  const tt=Nz(A(t,[R(-.12,.12),0,R(-.12,.12)]));put(LW,[x,wl,z],UP,tt,sp*R(2,3.1),sp*R(.5,.85),MAT.water,1);if(wl<-.7&&rnd()<.6)put(LU,[x,wl-.05,z],UP,tt,sp*2.4,sp*1.6,MAT.water,.5);
+  if(rel<2&&rnd()<.035)put(LI,[x,wl+.01,z],UP,tt,sp*R(.25,.4),sp*R(.25,.4),MAT.water,1,C.flags|F_TWINKLE);}});}
+for(const [a,b,c,d] of[[-65,-65,65,-55],[-65,55,65,65],[-65,-55,-55,55],[55,-55,65,55]])waterJob(a,b,c,d,1.1);
+waterJob(-34,65,-26,114,1.1);waterJob(-100,114,100,170,1.25);
+for(let gx=-520;gx<520;gx+=40){const x=gx+(((-gx-1000)%40)+40)%40;for(const [z0,z1] of[[-520,-125],[125,520]])waterJob(x,z0,x+2.2,z1,3.5);}
+for(let gx=-520;gx<520;gx+=40){const x=gx+(((-gx-1000)%40)+40)%40;if(Math.abs(x)>125)waterJob(x,-125,x+2.2,125,3.5);}
+// ---- quay walls along the canal ring, link canal and harbour
+C.refl=true;
+const qy=WY-.05,qh=-qy;
+for(const s of[1,-1]){
+ rect([-55,qy,s*55],[110,0,0],[0,qh,0],[0,0,s],MAT.stone,{rel:.7});rect([s*55,qy,-55],[0,0,110],[0,qh,0],[s,0,0],MAT.stone,{rel:.7});
+ rect([-65,qy,s*65],[130,0,0],[0,qh,0],[0,0,-s],(lu)=>s>0&&lu>30.5&&lu<39.5?-1:MAT.stone,{rel:.8});rect([s*65,qy,-65],[0,0,130],[0,qh,0],[-s,0,0],MAT.stone,{rel:.8});
+}
+rect([-34,qy,65],[0,0,49],[0,qh,0],[1,0,0],MAT.stone);rect([-26,qy,114],[0,0,-49],[0,qh,0],[-1,0,0],MAT.stone);
+rect([-100,qy,114],[200,0,0],[0,qh,0],[0,0,1],(lu)=>lu>66&&lu<74?-1:MAT.stone,{rel:.9});
+C.refl=false;
+// stone coping strokes along the edges (where light catches the wet edge)
+J0(()=>{for(let a=-55;a<55;a+=.9)for(const s of[1,-1]){feat(LG,[a,.02,s*54.85],UP,[1,0,0],1.1,.25,MAT.stone);feat(LG,[s*54.85,.02,a],UP,[0,0,1],1.1,.25,MAT.stone);
+ if(rnd()<.4)put(LI,[a,WY+.02,s*55.2],UP,[1,0,0],.08,.05,MAT.stone,1,F_TWINKLE);}});
+// ---- canal footbridges (arched), with railings
+function footbridge(cx,cz,axis){ // axis: direction of crossing
+ const d=axis==='z'?[0,0,1]:[1,0,0],sd=axis==='z'?[1,0,0]:[0,0,1],m0=54.5,m1=65.5,sgn=Math.sign(axis==='z'?cz:cx);
+ const P=t=>{const m=lerp(m0,m1,t);return A(K(d,m*sgn),[0,.12+.75*Math.sin(Math.PI*t),0]);};
+ C.refl=true;
+ J(11*3.2,.6,sp=>{const nu=Math.round(11/sp),nv=Math.round(3.2/sp);for(let i=0;i<nu;i++)for(let j=0;j<nv;j++){const t=(i+rnd())/nu,v=(j+rnd())/nv-.5;const p=A(P(t),K(sd,v*3.2));const p2=P(Math.min(1,t+.01)),tg=Nz(S(p2,P(Math.max(0,t-.01))));emitSample(p,Nz(X(K(sd,sgn),tg)),sd,sp,MAT.wood,.95);}});
+ for(const s of[-1.6,1.6]){J(11*1.6,.55,sp=>{const nu=Math.round(11/sp),nv=Math.round(1.6/sp);for(let i=0;i<nu;i++)for(let j=0;j<nv;j++){const t=(i+rnd())/nu,v=(j+rnd())/nv;const base=A(P(t),K(sd,s));const y0=WY;const top=base[1]+.9;const y=lerp(y0,top,v);
+   const archY=.12+.75*Math.sin(Math.PI*t)-.35-1.2*Math.sin(Math.PI*clamp((t-.12)/.76,0,1));if(y<archY+.0&&y<base[1]-.3&&t>.12&&t<.88)continue;
+   emitSample([base[0],y,base[2]],K(sd,Math.sign(s)),[0,1,0],sp,y>base[1]?MAT.wood:MAT.brick,y>base[1]?1:.7);}});}
+ C.refl=false;
+ // invisible railings
+ for(const s of[-1.75,1.75]){const a=A(P(0),K(sd,s)),b=A(P(1),K(sd,s));box(Math.min(a[0],b[0])-.12,0,Math.min(a[2],b[2])-.12,Math.max(a[0],b[0])+.12,2,Math.max(a[2],b[2])+.12,{cam:false});}
+}
+footbridge(0,-60,'z');footbridge(0,60,'z');footbridge(60,0,'x');footbridge(-60,0,'x');
+// link-canal street bridge
+boxS(-34.5,-.2,66.2,-25.5,.25,69.8,MAT.stone,{faces:'t',rel:.8});C.refl=true;rect([-34,WY,69.8],[8,0,0],[0,.8,0],[0,0,1],(lu,lv)=>((lu-4)/3.2)**2+(lv/.6)**2<1?-1:MAT.brick);rect([-26,WY,66.2],[-8,0,0],[0,.8,0],[0,0,-1],(lu,lv)=>((lu-4)/3.2)**2+(lv/.6)**2<1?-1:MAT.brick);C.refl=false;
+// ---- invisible water-edge walls (keep her out of the canals)
+function edge(x0,z0,x1,z1){box(x0,-.5,z0,x1,1.3,z1,{cam:false});}
+for(const s of[1,-1]){edge(-55,s*55-.25,-1.6,s*55+.25);edge(1.6,s*55-.25,55,s*55+.25);edge(s*55-.25,-55,s*55+.25,-1.6);edge(s*55-.25,1.6,s*55+.25,55);
+ edge(-65,s*65-.25,-1.6,s*65+.25);edge(1.6,s*65-.25,65,s*65+.25);edge(s*65-.25,-65,s*65+.25,-1.6);edge(s*65-.25,1.6,s*65+.25,65);}
+edge(-34.25,65,-33.75,66.2);edge(-34.25,69.8,-33.75,114);edge(-26.25,65,-25.75,66.2);edge(-26.25,69.8,-25.75,114);
+edge(-100,113.75,-34,114.25);edge(-26,113.75,-2.6,114.25);edge(2.6,113.75,100,114.25);
+edge(-2.85,114,-2.6,170);edge(2.6,114,2.85,170);edge(-100,169.75,-2.6,170.25);edge(2.6,169.75,100,170.25);edge(-100.25,114,-99.75,170);edge(99.75,114,100.25,170);
+
+// ---- town wall with gaps
+function wallSeg(x0,z0,x1,z1,refl){C.refl=!!refl;const h=4.5;boxS(x0,0,z0,x1,h,z1,{d:MAT.brick2,t:MAT.stone},{rel:1.2,aoF:wallAO});C.refl=false;occ(x0,z0,x1,z1);box(x0,0,z0,x1,h,z1);}
+wallSeg(-111,-111,-4,-109);wallSeg(4,-111,111,-109);
+wallSeg(-111,-109,-109,-4);wallSeg(-111,4,-109,109);wallSeg(109,-109,111,-4);wallSeg(109,4,111,109);
+wallSeg(-111,109,-34,111,true);wallSeg(-26,109,-10,111,true);wallSeg(10,109,111,111,true);
+boxS(-34,2.4,109,-26,4.5,111,{d:MAT.brick2,t:MAT.stone},{rel:1.2});
+// north gatehouse
+boxS(-6,0,-113,6,9,-107,{d:MAT.brick,t:MAT.slate},{faces:'news',rel:1});box(-6,0,-113,-2.2,9,-107);box(2.2,0,-113,6,9,-107);
+rect([-6,9,-113],[12,0,0],[0,3,3],Nz([0,1,-1]),MAT.slate,{rel:1.2});rect([6,9,-107],[-12,0,0],[0,3,-3],Nz([0,1,1]),MAT.slate,{rel:1.2});
+J0(()=>{feat(LU,[0,1.7,-113.05],[0,0,-1],UP,3.6,3.6,MAT.dark,.3);feat(LU,[0,1.7,-106.95],[0,0,1],UP,3.6,3.6,MAT.dark,.3);});
+// ---- Rotterdam-style twin-tower gate on the harbour
+C.refl=true;
+const gateOpen=(lu,lv)=>((lu-7)/2.5)**2+(lv/4.3)**2<1?-1:MAT.brick;
+rect([-7,0,113.5],[14,0,0],[0,11,0],[0,0,1],gateOpen,{rel:.8,aoF:wallAO});rect([7,0,106],[-14,0,0],[0,11,0],[0,0,-1],gateOpen,{rel:.9});
+rect([7,0,113.5],[0,0,-7.5],[0,11,0],[1,0,0],MAT.brick,{rel:.9});rect([-7,0,106],[0,0,7.5],[0,11,0],[-1,0,0],MAT.brick,{rel:.9});
+rect([-7.3,11,113.8],[14.6,0,0],[0,5,-3.9],Nz([0,3.9,5]),MAT.slate,{rel:.9,tv:true});rect([7.3,11,105.7],[-14.6,0,0],[0,5,3.9],Nz([0,3.9,-5]),MAT.slate,{rel:.9,tv:true});
+tri([-7.3,11,113.8],[-7.3,11,105.7],[-7.3,16,109.75],[-1,0,0],MAT.brick);tri([7.3,11,105.7],[7.3,11,113.8],[7.3,16,109.75],[1,0,0],MAT.brick);
+cyl([0,16,109.75],.9,.05,6,MAT.slate,{rel:.6});
+for(const s of[-1,1]){cyl([s*8.3,0,113.4],3,3,14.5,MAT.brick,{rel:.75,aoF:p=>wallAO(p)});cyl([s*8.3,14.5,113.4],3.35,.08,10,MAT.slate,{rel:.7});disk([s*8.3,14.5,113.4],3,UP,MAT.slate);
+ box(s*8.3-3,0,110.4,s*8.3+3,14.5,116.4);}
+J0(()=>{C.refl=true;feat(LU,[0,2.1,113.55],[0,0,1],UP,4.3,5,MAT.dark,.25);
+ for(const s of[-1,1])for(const y of[5,8.5,11.5]){const a=Math.PI/2+s*.5,n=[Math.cos(a),0,Math.sin(a)];windowF([s*8.3+n[0]*3.02,y,113.4+n[2]*3.02],[-n[2],0,n[0]],n,.6,1.1,{sh:-1},false);}
+ for(const x of[-4,0,4])windowF([x,7.5,113.55],[1,0,0],[0,0,1],.8,1.6,{sh:-1},false);});
+box(-7,0,106,-2.5,11,113.5);box(2.5,0,106,7,11,113.5);occ(-11.5,105,11.5,116);
+// harbour bridge from the gate
+boxS(-2.5,.1,113.5,2.5,.55,171,MAT.stone,{faces:'t',rel:.9});
+for(const s of[-1,1]){rect([s*2.5,WY,s>0?171:113.5],[0,0,s>0?-57.5:57.5],[0,1.65,0],[s,0,0],(lu,lv)=>{const k=(lu%8)-4;return(k/2.8)**2+(lv/.95)**2<1?-1:lv>1.1?MAT.stone:MAT.brick;},{rel:.8});
+ rect([s*2.5,.55,s>0?171:113.5],[0,0,s>0?-57.5:57.5],[0,.8,0],[s,0,0],MAT.stone,{rel:.9});}
+C.refl=false;
+// ---- Nieuwe Kerk
+function tower(x0,z0,x1,z1,y0,y1,m,opt={}){C.refl=!!opt.refl;const lanc=(lu,lv)=>{const w=x1-x0,k=((lu/w*3)%1)-.5;return Math.abs(k)<.11&&lv>(y1-y0)*.25&&lv<(y1-y0)*.82?-1:m;};
+ rect([x0,y0,z1],[x1-x0,0,0],[0,y1-y0,0],[0,0,1],lanc,{rel:.8});rect([x1,y0,z0],[x0-x1,0,0],[0,y1-y0,0],[0,0,-1],lanc,{rel:.9});
+ rect([x1,y0,z1],[0,0,z0-z1],[0,y1-y0,0],[1,0,0],lanc,{rel:.8});rect([x0,y0,z0],[0,0,z1-z0],[0,y1-y0,0],[-1,0,0],lanc,{rel:.8});
+ rect([x0,y1,z1],[x1-x0,0,0],[0,0,z0-z1],UP,MAT.stone,{rel:.9});
+ J0(()=>{const w=x1-x0;for(let k=0;k<3;k++){const lu=(k+.5)/3*w;const wy=y0+(y1-y0)*.535,wh=(y1-y0)*.55;feat(LU,[x0+lu,wy,z1+.02],[0,0,1],UP,wh,w*.2,MAT.dark,.4);feat(LU,[x0+lu,wy,z0-.02],[0,0,-1],UP,wh,w*.2,MAT.dark,.4);feat(LU,[x1+.02,wy,z1-lu],[1,0,0],UP,wh,w*.2,MAT.dark,.4);feat(LU,[x0-.02,wy,z0+lu],[-1,0,0],UP,wh,w*.2,MAT.dark,.4);feat(LG,[x0+lu,wy,z1+.03],[0,0,1],UP,wh,w*.17,MAT.dark,.5);feat(LG,[x0+lu,wy,z0-.03],[0,0,-1],UP,wh,w*.17,MAT.dark,.5);
+  feat(LG,[x1+.03,wy,z1-lu],[1,0,0],UP,wh,w*.17,MAT.dark,.5);feat(LG,[x0-.03,wy,z0+lu],[-1,0,0],UP,wh,w*.17,MAT.dark,.5);}
+  for(let a=0;a<w;a+=1.4){feat(LG,[x0+a+.7,y1-.15,z1+.06],[0,0,1],[1,0,0],1.6,.3,MAT.lime);feat(LG,[x1+.06,y1-.15,z1-a-.7],[1,0,0],[0,0,1],1.6,.3,MAT.lime);feat(LG,[x0-.06,y1-.15,z0+a+.7],[-1,0,0],[0,0,1],1.6,.3,MAT.lime);}});
+ C.refl=false;box(x0,y0,z0,x1,y1,z1);}
+tower(-22,-35,-12,-25,0,30,MAT.brick);tower(-21,-34,-13,-26,30,44,MAT.brick);tower(-19.8,-32.8,-14.2,-27.2,44,55,MAT.lime);
+cyl([-17,55,-30],2.7,2.5,8,(a,y)=>Math.abs(((a*8/6.283)%1)-.5)<.17&&y>2&&y<6.5?MAT.dark:MAT.lime,{rel:.8});cyl([-17,63,-30],2.7,.06,15,MAT.slate,{rel:.7});
+for(const [px,pz] of[[-21.4,-34.4],[-12.6,-34.4],[-21.4,-25.6],[-12.6,-25.6]])cyl([px,44,pz],.5,.03,4,MAT.slate,{rel:.5});
+cyl([-17,77.5,-30],.06,.06,2.5,MAT.brass,{rel:.3});
+boxS(-12,0,-35,14,15,-25,{d:MAT.brick,t:MAT.slate},{faces:'nsew',rel:.85,aoF:wallAO});occ(-22,-35,14,-25);box(-12,0,-35,14,15,-25);
+rect([-12.3,15,-25],[26.6,0,0],[0,7,-5],Nz([0,5,7]),MAT.slate,{rel:1.2,tv:true});rect([14.3,15,-35],[-26.6,0,0],[0,7,5],Nz([0,5,-7]),MAT.slate,{rel:1.2,tv:true});
+tri([14,15,-25],[14,15,-35],[14,22,-30],[1,0,0],MAT.brick);
+J0(()=>{for(let x=-9;x<14;x+=3.4){feat(LG,[x,8,-24.97],[0,0,1],UP,8.5,1.1,MAT.dark,.5);feat(LG,[x,8,-24.96],[0,0,1],UP,8.6,.12,MAT.lime,.8);feat(LG,[x,8,-35.03],[0,0,-1],UP,8.5,1.1,MAT.dark,.5);}});
+// ---- studio (painter's room) : interior + shell
+const SX0=-34,SX1=-24,SZ0=24,SZ1=36,SH=4.2;
+C.flags=F_INT;
+const sp0=.1*WSP;
+J0(()=>{C.flags=F_INT;
+ sRect([SX0,0,SZ1],[SX1-SX0,0,0],[0,0,SZ0-SZ1],UP,sp0,(lu,lv)=>((Math.floor(lu/.55)+Math.floor(lv/.55))&1)?MAT.chkW:MAT.chkB);
+ sRect([SX0,SH,SZ0],[SX1-SX0,0,0],[0,0,SZ1-SZ0],[0,-1,0],sp0*1.6,MAT.wallIn);
+ sRect([SX0,0,SZ1],[0,0,SZ0-SZ1],[0,SH,0],[1,0,0],sp0,(lu,lv)=>{const z=SZ1-lu;return z>26.4&&z<31.6&&lv>.95&&lv<3.65?-1:MAT.wallIn;},{aoF:p=>.5+.5*Math.min(1,p[1]/2)});
+ sRect([SX1,0,SZ0],[0,0,SZ1-SZ0],[0,SH,0],[-1,0,0],sp0,(lu,lv)=>{const z=SZ0+lu;if(z>29&&z<31&&lv<2.3)return -1;if(z>32&&z<35.4&&lv>1.5&&lv<3.3)return -1;return MAT.wallDark;},{aoF:p=>.6+.4*Math.min(1,p[1]/2)});
+ sRect([SX0,0,SZ0],[SX1-SX0,0,0],[0,SH,0],[0,0,1],sp0,MAT.wallDark);
+ sRect([SX1,0,SZ1],[SX0-SX1,0,0],[0,SH,0],[0,0,-1],sp0*1.2,MAT.wallIn);
+ // the big leaded window
+ const wz0=26.5,wz1=31.5,wy0=1,wy1=3.6;
+ sRect([SX0+.02,wy0,wz1],[0,0,wz0-wz1],[0,wy1-wy0,0],[1,0,0],sp0*.6,MAT.winBright);
+ for(let k=-12;k<=12;k++)for(const s of[1,-1]){for(let tt=0;tt<1;tt+=.1){const z=(wz0+wz1)/2+k*.24+s*(tt-.5)*2.6,y=(wy0+wy1)/2+(tt-.5)*2.6;if(z<wz0||z>wz1||y<wy0||y>wy1)continue;feat(LG,[SX0+.05,y,z],[1,0,0],Nz([0,1,s]),.28,.02,MAT.lead,.9);}}
+ for(const z of[wz0,(wz0+wz1)/2,wz1])feat(LG,[SX0+.06,(wy0+wy1)/2,z],[1,0,0],UP,wy1-wy0+.1,.09,MAT.easel,.8);
+ for(const y of[wy0,2.45,wy1])feat(LG,[SX0+.06,y,(wz0+wz1)/2],[1,0,0],[0,0,1],wz1-wz0+.1,.09,MAT.easel,.8);
+ for(let i=0;i<60;i++)put(LI,[SX0+.07,R(wy0,wy1),R(wz0,wz1)],[1,0,0],UP,.025,.025,MAT.winBright,1);
+ // ceiling beams
+ for(let z=SZ0+.8;z<SZ1;z+=1.3)feat(LG,[(SX0+SX1)/2,SH-.02,z],[0,-1,0],[1,0,0],10,.28,MAT.easel,.5);
+ // map on the east wall
+ sRect([SX1-.03,1.5,32],[0,0,3.4],[0,1.8,0],[-1,0,0],.05*WSP,(lu,lv)=>{if(lu<.08||lu>3.32||lv<.08||lv>1.72)return MAT.dark;const nn=n1(lu*2.3+3)+n1(lv*2.9+lu)*.6;return nn>.85?MAT.mapSea:MAT.map;});
+ feat(LG,[SX1-.06,3.33,33.7],[-1,0,0],[0,0,1],3.6,.05,MAT.dark);feat(LG,[SX1-.06,1.47,33.7],[-1,0,0],[0,0,1],3.6,.05,MAT.dark);
+ // easel with canvas
+ const ex=-29.6,ez=33,en=Nz([.55,0,-.83]),er=X(UP,en);
+ for(const s of[-.38,.38])feat(LG,A([ex,1.05,ez],K(er,s)),en,UP,2.1,.05,MAT.easel,.8);feat(LG,A([ex,1.0,ez],K(en,-.5)),er,Nz([0,1,.4]),2.1,.05,MAT.easel,.6);
+ sRect(A(A([ex,1.1,ez],K(er,-.42)),K(en,.04)),K(er,.84),[0,1,0],en,.035*WSP,(lu,lv)=>{const v=n1(lu*4)+n1(lv*5+2);return lv<.35?MAT.skirt:v>1.1?MAT.ochre:MAT.woods;});
+ feat(LG,A([ex,1.05,ez],K(en,.05)),en,er,.95,.06,MAT.easel,.8);
+ // table with carpet and a jug
+ C.flags=F_INT;
+ const tx0=-33.3,tx1=-31.9,tz0=32.2,tz1=34.6;
+ sRect([tx0,.78,tz1],[tx1-tx0,0,0],[0,0,tz0-tz1],UP,.05*WSP,(lu,lv)=>(Math.floor(lu*6)+Math.floor(lv*6))%3===0?MAT.carpetB:MAT.carpetR);
+ sRect([tx1,.05,tz1],[0,0,tz0-tz1],[0,.73,0],[1,0,0],.05*WSP,(lu,lv)=>lv>.6||(Math.floor(lu*5+lv*3))%2?MAT.carpetR:MAT.carpetB);
+ sRect([tx0,.05,tz0],[tx1-tx0,0,0],[0,.73,0],[0,0,-1],.05*WSP,MAT.carpetR);
+ sCyl([-32.4,.78,33.2],.07,.09,.22,.012*WSP,MAT.brass);sEll([-32.4,1.04,33.2],[.06,.05,.06],.012*WSP,MAT.brass);
+ sCyl([-32.1,.78,33.8],.035,.04,.12,.01*WSP,MAT.winBright);
+ // chair with blue cushion and brass finials
+ const cx=-30.6,cz=34.4;
+ sRect([cx-.25,.46,cz+.25],[.5,0,0],[0,0,-.5],UP,.03*WSP,MAT.carpetB);sRect([cx-.25,.46,cz-.25],[.5,0,0],[0,.6,0],[0,0,1],.03*WSP,MAT.carpetB);
+ for(const s of[-.25,.25]){feat(LG,[cx+s,.5,cz-.25],[0,0,1],UP,1.1,.05,MAT.easel,.8);put(LI,[cx+s,1.08,cz-.24],[0,0,1],UP,.05,.05,MAT.brass,1);}
+ C.flags=0;
+});
+C.flags=0;
+// studio shell (exterior)
+{const x0=SX0-.3,x1=SX1+.3,z0=SZ0-.3,z1=SZ1+.3,h=5;
+ rect([x0,0,z0],[0,0,z1-z0],[0,h,0],[-1,0,0],(lu,lv)=>{const z=z0+lu;return z>26.4&&z<31.6&&lv>.95&&lv<3.65?-1:MAT.brick;},{rel:.7,aoF:wallAO});
+ rect([x1,0,z1],[0,0,z0-z1],[0,h,0],[1,0,0],(lu,lv)=>{const z=z1-lu;return z>29&&z<31&&lv<2.3?-1:MAT.brick;},{rel:.7,aoF:wallAO});
+ rect([x0,0,z1],[x1-x0,0,0],[0,h,0],[0,0,1],MAT.brick2,{rel:.9});rect([x1,0,z0],[x0-x1,0,0],[0,h,0],[0,0,-1],MAT.brick2,{rel:.9});
+ rect([x0-.3,h,z0-.3],[0,0,z1-z0+.6],[x1-x0+.6,0,0].map((v,i)=>i===0?(x1-x0)/2+.3:i===1?4:0),Nz([-4,(x1-x0)/2,0]),MAT.tile,{rel:.9,tv:true});
+ rect([x1+.3,h,z1+.3],[0,0,-(z1-z0+.6)],[-((x1-x0)/2+.3),4,0],Nz([4,(x1-x0)/2,0]),MAT.tile,{rel:.9,tv:true});
+ tri([x0,h,z1],[x1,h,z1],[(x0+x1)/2,h+4,z1],[0,0,1],MAT.brick2);tri([x1,h,z0],[x0,h,z0],[(x0+x1)/2,h+4,z0],[0,0,-1],MAT.brick2);
+ J0(()=>{feat(LU,[x0-.03,2.3,29],[-1,0,0],UP,2.7,5.2,MAT.glass,.8);for(let z=26.8;z<31.4;z+=.45)feat(LG,[x0-.05,2.3,z],[-1,0,0],UP,2.6,.04,MAT.lead);for(let y=1.1;y<3.6;y+=.45)feat(LG,[x0-.05,y,29],[-1,0,0],[0,0,1],5.1,.04,MAT.lead);
+  for(let i=0;i<14;i++)put(LI,[x0-.06,R(1.1,3.5),R(26.6,31.4)],[-1,0,0],UP,.06,.06,MAT.glass,1);feat(LU,[x1+.03,1.15,30],[1,0,0],UP,2.3,2,MAT.dark,.4);});
+ occ(x0,z0,x1,z1);
+ box(x0,0,z0,SX0,h,z1);box(SX1,0,z0,x1,h,29);box(SX1,0,31,x1,h,z1);box(x0,0,z0,x1,h,SZ0);box(x0,0,SZ1,x1,h,z1);box(x0,SH,z0,x1,h+4,z1,{cam:true});
+ box(-30.1,0,32.5,-29.1,1.8,33.5,{cam:false});box(-33.3,0,32.2,-31.9,.8,34.6,{cam:false});}
+// ---- lime-washed courtyard with checkered floor
+{const x0=24,x1=36,z0=-36,z1=-24,h=3.2;
+ J0(()=>{sRect([x0,0.01,z1],[x1-x0,0,0],[0,0,z0-z1],UP,.15*WSP,(lu,lv)=>((Math.floor(lu/.6)+Math.floor(lv/.6))&1)?MAT.chkW:MAT.chkB);});
+ const gate=(lu,lv)=>lu>4.5&&lu<7.5&&lv<2.6?-1:MAT.lime;
+ rect([x0,0,z1],[x1-x0,0,0],[0,h,0],[0,0,1],gate,{rel:.7});rect([x1,0,z1-.3],[x0-x1,0,0],[0,h,0],[0,0,-1],(lu,lv)=>gate(x1-x0-lu,lv),{rel:.6});
+ rect([x0,0,z0],[x1-x0,0,0],[0,h,0],[0,0,1],MAT.lime,{rel:.6});rect([x1,0,z0],[0,0,z1-z0],[0,h,0],[-1,0,0],MAT.lime,{rel:.6});rect([x0,0,z1],[0,0,z0-z1],[0,h,0],[1,0,0],MAT.lime,{rel:.6});
+ rect([x1,0,z1],[0,0,z0-z1],[0,h,0],[1,0,0],MAT.lime,{rel:.9});rect([x0,0,z0],[0,0,z1-z0],[0,h,0],[-1,0,0],MAT.lime,{rel:.9});
+ J0(()=>{feat(LU,[30,1.1,z0+.03],[0,0,1],UP,2.2,1.1,MAT.door,.6);feat(LG,[30,1.1,z0+.04],[0,0,1],UP,2.1,.9,MAT.door,.7);
+  for(let x=x0+.3;x<x1;x+=.9)feat(LG,[x,h-.05,z1+.02],[0,0,1],[1,0,0],1.1,.12,MAT.tile);});
+ cyl([27,0,-33],.3,.32,.5,MAT.wood,{rel:.3});boxS(32,0,-35.6,35,.45,-35.1,MAT.wood,{rel:.4});
+ box(x0,0,z1-.3,x0+4.5,h,z1);box(x0+7.5,0,z1-.3,x1,h,z1);box(x0,0,z0,x1,h,z0+.3);box(x0,0,z0,x0+.3,h,z1);box(x1-.3,0,z0,x1,h,z1);occ(x0,z0,x0+.3,z1);occ(x1-.3,z0,x1,z1);occ(x0,z0,x1,z0+.3);}
+// ---- market stalls, barrels, cheeses, the Delftware display
+function stall(x,z,awn){const y=0;boxS(x-1.2,.75,z-.5,x+1.2,.85,z+.5,MAT.wood,{faces:'tnsew',rel:.45});
+ J0(()=>{for(const [sx,sz] of[[-1.1,-.4],[1.1,-.4],[-1.1,.4],[1.1,.4]])feat(LG,[x+sx,.4,z+sz+.02],[0,0,1],UP,.8,.06,MAT.wood,.6);for(const sx of[-1.25,1.25])feat(LG,[x+sx,1.2,z-.65],[0,0,1],UP,2.4,.06,MAT.wood,.7);});
+ const prev=C.flags;C.flags|=F_DBL;rect([x-1.45,2.35,z-.85],[2.9,0,0],[0,-.55,1.6],Nz([0,1.6,.55]),(lu)=>Math.floor(lu/.36)%2?MAT.awnW:awn,{rel:.4});C.flags=prev;
+ J0(()=>{for(let i=0;i<9;i++){const px=x+R(-1,1),pz=z+R(-.35,.35);if(rnd()<.5){sCyl([px,.85,pz],.17,.17,.1,.03,MAT.cheese);sDisk([px,.95,pz],.17,UP,.03,MAT.cheese);}else sEll([px,.95,pz],[.11,.1,.11],.03,MAT.cabbage);}});
+ box(x-1.2,0,z-.5,x+1.2,.9,z+.5,{cam:false});}
+stall(-12,-11,MAT.awnR);stall(-3,-13,MAT.awnY);stall(7,-11,MAT.awnR);stall(-13,7,MAT.awnY);stall(9,9,MAT.awnR);stall(-1,13,MAT.awnY);stall(-17,-2,MAT.awnR);stall(14,-4,MAT.awnY);stall(3,2,MAT.awnR);
+for(const [x,z] of[[-9,-9.5],[-8.4,-10.2],[4,-9.2],[12,6],[12.6,6.7],[-15,9.5],[2.5,11],[16,-14]])barrel(x,z,.72,.33,.45);
+for(const [x,z] of[[-5,-10],[10.5,8],[-11,5.5],[15,-16]])crate(x,z,.62,.45);
+// Delftware display table in front of the pottery shop
+boxS(18.9,.75,-2.6,20.3,.85,2.6,MAT.wood,{faces:'twe',rel:.4});box(18.9,0,-2.6,20.3,.9,2.6,{cam:false});
+J0(()=>{const sp=.016*WSP;
+ for(let i=0;i<9;i++){const z=-2.2+i*.55,x=19.3+(i%2)*.4,h=R(.22,.42),r=R(.07,.12);
+  const patt=(a,y)=>Math.sin(a*6+y*30)>.25||Math.abs(y-h*.5)<.025?MAT.delftB:MAT.delftW;
+  sCyl([x,.85,z],r*.7,r,h*.55,sp,patt);sCyl([x,.85+h*.55,z],r,r*.45,h*.45,sp,patt);}
+ for(let i=0;i<6;i++){const z=-2.3+i*.9,c=[20.15,1.12,z];sDisk(c,.17,Nz([-1,.25,0]),sp,(lx,ly,rr)=>rr>.82||(rr>.45&&rr<.55)||(rr<.3&&Math.sin(lx*60)>.3)?MAT.delftB:MAT.delftW);}
+});
+// mooring posts along the inner quay
+for(let a=-50;a<=50;a+=7)for(const [x,z] of[[a,54.4],[a,-54.4],[54.4,a],[-54.4,a]]){if(Math.abs(a)<3)continue;cyl([x,0,z],.13,.12,.9,MAT.wood,{rel:.25});disk([x,.9,z],.13,UP,MAT.iron,{rel:.25});box(x-.15,0,z-.15,x+.15,.9,z+.15,{cam:false,jump:true});}
+// ---- obstacles on the walking path (auto-walk jumps them)
+const PATH=[[-52,52],[52,52],[52,-52],[-52,-52]];
+{const kinds=['barrel','crate','wall','bridge'];let k=0;
+ for(let s=0;s<4;s++){const a=PATH[s],b=PATH[(s+1)%4],dir=[(b[0]-a[0])/104,(b[1]-a[1])/104],mid=[(a[0]+b[0])/2,(a[1]+b[1])/2],nrm=[-dir[1],dir[0]];
+  for(const off of[-34,-16,16,34]){const x=mid[0]+dir[0]*off,z=mid[1]+dir[1]*off,kind=kinds[(k++)%4];
+   if(kind==='barrel')barrel(x,z,.68,.34,.4);
+   else if(kind==='crate')crate(x,z,.6,.4);
+   else if(kind==='wall'){const hx=Math.abs(nrm[0])*2.4+Math.abs(dir[0])*.22,hz=Math.abs(nrm[1])*2.4+Math.abs(dir[1])*.22;boxS(x-hx,0,z-hz,x+hx,.5,z+hz,MAT.stone,{rel:.4,faces:'nsewt'});box(x-hx,0,z-hz,x+hx,.5,z+hz,{jump:true,cam:false});}
+   else{const hx=Math.abs(nrm[0])*1.1+Math.abs(dir[0])*.65,hz=Math.abs(nrm[1])*1.1+Math.abs(dir[1])*.65;
+    J0(()=>{for(let i=0;i<9;i++){const t=(i+.5)/9-.5,p=[x+dir[0]*t*1.3,.06+.34*Math.cos(t*Math.PI),z+dir[1]*t*1.3];feat(LU,p,UP,[nrm[0],0,nrm[1]],2.3,.2,MAT.wood,.6);feat(LG,A(p,[0,.01,0]),UP,[nrm[0],0,nrm[1]],2.2,.13,MAT.wood,.95);}
+     feat(LU,[x,.01,z],UP,[nrm[0],0,nrm[1]],5.6,.7,MAT.dark,.3);for(const sd of[-1.05,1.05])feat(LG,[x+nrm[0]*sd,.55,z+nrm[1]*sd],[nrm[0],0,nrm[1]],[dir[0],0,dir[1]],1.4,.05,MAT.wood,.8);});
+    box(x-hx,0,z-hz,x+hx,.4,z+hz,{jump:true,cam:false});}
+   OBST.push([x,z]);}}}
+// ---- trees: quays, gardens, square, south bank, dike
+for(let a=-62;a<=62;a+=9)for(const [x,z] of[[a,68],[a,-68],[68,a],[-68,a]]){if(Math.abs(a)<5||(z===68&&Math.abs(x+30)<6))continue;tree(x+R(-.5,.5),z+R(-.3,.3),R(.85,1.05),1.3);}
+for(let i=0;i<46;i++){let x,z;do{x=R(-106,106);z=R(-106,94);}while(Math.max(Math.abs(x),Math.abs(z))<88||Math.abs(x)<6||Math.abs(z)<6);tree(x,z,R(.9,1.25),1.7);}
+for(const [x,z] of[[-30,-30],[-27,-33],[18.5,18.5],[-18.5,18.5]])tree(x,z,.9,1.3);
+for(let x=-90;x<=90;x+=14)if(Math.abs(x)>36)tree(x+R(-3,3),R(178,186),R(1,1.3),1.9);
+for(let z=-125;z>-330;z-=16)for(const s of[-1,1])tree(s*11,z,1.2,2.4,true);
+// ---- windmill on the bastion
+const MILL=[-118,-118];
+{const [mx,mz]=MILL;cyl([mx,-.4,mz],11,9,4.4,MAT.grass,{rel:1.2});disk([mx,4,mz],9,UP,MAT.grass,{rel:1.2});
+ cyl([mx,4,mz],3.4,2.3,11,MAT.millWood,{rel:.8,aoF:p=>.6+.4*Math.min(1,(p[1]-4)/6)});
+ ell([mx,15.4,mz],[2.7,1.9,3.1],MAT.tile,{rel:.7,cut:d=>d[1]<-.2});
+ J0(()=>{for(let y=6;y<14;y+=3.2){const a=Math.PI*1.25,n=[Math.cos(a),0,Math.sin(a)];windowF([mx+n[0]*2.9,y,mz+n[2]*2.9],[-n[2],0,n[0]],n,.5,.8,{sh:-1},false);}});
+ box(mx-3,0,mz-3,mx+3,15,mz+3);}
+const BM_MILL=13;
+{const prev=C.bone;C.bone=BM_MILL;C.flags=F_DBL;C.tj=.05;
+ J0(()=>{C.bone=BM_MILL;C.flags=F_DBL;const sp=.16*WSP;
+  for(let i=0;i<4;i++){const a=i*Math.PI/2,ax=[Math.cos(a),Math.sin(a),0],sd=[-Math.sin(a),Math.cos(a),0];
+   sRect(A(K(ax,1.2),K(sd,.15)),K(ax,9),K(sd,1.7),[0,0,1],sp,(lu,lv)=>(lu%1.1)<.1||lv<.12||lv>1.58?MAT.millWood:MAT.sail);
+   feat(LG,K(ax,5.4),[0,0,1],ax,10.5,.22,MAT.millWood,.8);}
+  sEll([0,0,-.3],[.55,.55,.6],.08,MAT.millWood);});
+ C.bone=prev;C.flags=0;C.tj=.35;}
+// ---- moored barges (each on its own bone, bobbing)
+const BARGES=[[-62,119.5,0],[38,120.5,.05],[-22,164,Math.PI+.1],[66,163,Math.PI],[22,60.5,0],[60.6,-24,Math.PI/2]];
+const BM_BARGE=14;
+BARGES.forEach((bg,i)=>{const prev=C.bone;C.bone=BM_BARGE+i;C.refl=true;
+ const L=12,W=3.2,hb=-.6,ht=.75;
+ rect([-W/2,hb,-L/2+.5],[0,0,L-2.5],[0,ht-hb,0],[-1,0,0],(lu,lv)=>lv>1.15?MAT.ochre:MAT.tar,{rel:.45});
+ rect([W/2,hb,L/2-2],[0,0,-(L-2.5)],[0,ht-hb,0],[1,0,0],(lu,lv)=>lv>1.15?MAT.ochre:MAT.tar,{rel:.45});
+ tri([-W/2,hb,L/2-2],[-W/2,ht,L/2-2],[0,ht+.3,L/2],Nz([-1,0,.6]),MAT.tar,{rel:.45});tri([W/2,ht,L/2-2],[W/2,hb,L/2-2],[0,ht+.3,L/2],Nz([1,0,.6]),MAT.tar,{rel:.45});
+ tri([-W/2,hb,L/2-2],[0,ht+.3,L/2],[0,hb,L/2],Nz([-1,0,.8]),MAT.tar,{rel:.5});tri([W/2,hb,L/2-2],[0,hb,L/2],[0,ht+.3,L/2],Nz([1,0,.8]),MAT.tar,{rel:.5});
+ rect([W/2,hb,-L/2+.5],[-W,0,0],[0,ht-hb+.1,0],[0,0,-1],MAT.tar,{rel:.5});
+ rect([-W/2,ht,L/2-2],[W,0,0],[0,0,-(L-2.5)],UP,MAT.wood,{rel:.45});
+ boxS(-1.2,ht,-L/2+.6,1.2,ht+1.3,-L/2+3.4,{d:MAT.shG,t:MAT.wood},{rel:.4});
+ cyl([0,ht,1],.12,.08,8,MAT.wood,{rel:.25});ell([0,ht+3.5,1.3],[.25,2.6,.25],MAT.sail,{rel:.25});
+ C.bone=prev;C.refl=false;});
+// ---- cows in the polder (body + head bones)
+const COWS=[];const BM_COW=20;
+for(let i=0;i<10;i++){const x=i<5?R(135,240):R(-240,-135),z=i<5?R(-250,-135):R(-230,-130),yaw=R(0,6.28);COWS.push({x,z,yaw,ph:R(0,6)});
+ const b=BM_COW+i*2,prev=C.bone;const patch=d=>n1(d[0]*3+d[2]*4+i*7)+n1(d[1]*5-d[2]*2+i)>1.05?MAT.cowB:MAT.cowW;
+ C.bone=b;ell([0,1.08,0],[.38,.4,.95],patch,{rel:.3});for(const [lx,lz] of[[-.22,-.6],[.22,-.6],[-.22,.6],[.22,.6]])cyl([lx,0,lz],.08,.07,.8,MAT.cowW,{rel:.25});
+ C.bone=b+1;ell([0,-.05,.28],[.16,.18,.3],patch,{rel:.22});cyl([-.12,.08,.12],.03,.005,.18,MAT.cowW,{rel:.15});cyl([.12,.08,.12],.03,.005,.18,MAT.cowW,{rel:.15});
+ C.bone=prev;box(x-1,0,z-1,x+1,1.5,z+1,{cam:false});}
+// ---- distant landscape: dunes, woods, a church on the horizon. Each is a solid band down to below the ground.
+function distant(Rr,base,amp,fq,mt,rel,haze,spire){
+ const prev=C.flags;C.flags=haze?F_HAZE:0;
+ const prof=th=>{let h=base+amp*(n1(th*fq)*.7+n1(th*fq*3.1)*.3);if(spire){const dd=Math.abs(th-spire)*Rr;if(dd<4)h=Math.max(h,base+55*(1-dd/4));if(dd<14)h=Math.max(h,base+12);}return h;};
+ J(2*Math.PI*Rr*(base+amp*.6+30),rel,sp=>{const nu=Math.round(2*Math.PI*Rr/sp);for(let i=0;i<nu;i++){const th=(i+rnd())/nu*Math.PI*2,h=prof(th),ca=Math.cos(th),sa=Math.sin(th);const n=[-ca,0,-sa];
+  const nv=Math.max(1,Math.round((h+30)/sp));for(let j=0;j<nv;j++){const y=-30+(j+rnd())/nv*(h+30);emitSample([ca*Rr,y,sa*Rr],n,Math.abs(h-y)<sp*1.5?[-sa,0,ca]:[-sa,.4,ca],sp,mt,clamp(.55+.45*(y/h),0,1));}}});
+ C.flags=prev;}
+distant(620,7,16,7,MAT.dune,9,true,0);distant(900,16,12,25,MAT.woods,13,false,0);distant(1350,6,5,11,MAT.horizon,20,true,5.6);
+// ---- sky dome strokes (positions are directions; colour is computed every frame from drifting cumulus)
+for(let i=0;i<SKY_N;i++){const y=-.12+1.12*(i+rnd())/SKY_N,ph=i*2.399963+rnd()*.4,rr=Math.sqrt(1-y*y),d=[rr*Math.cos(ph),y,rr*Math.sin(ph)];
+ const ang=Math.sqrt(2*Math.PI*1.12/SKY_N),L=2400*ang;const t=Nz([-Math.sin(ph),R(-.18,.18),Math.cos(ph)]);
+ LS.push(d,K(d,-1),t,L*R(2.2,3.2)/20,L*R(1.1,1.5)/20,0,0,0,1,rnd());}
+
+// ============================================================ protagonist
+const B={HIPS:1,SKIRT:2,TORSO:3,HEAD:4,TAIL:5,UAL:6,FAL:7,UAR:8,FAR:9,FOOTL:10,FOOTR:11,BASKET:12};
+const PEARL_POS=[.079,.038,-.004],PEARL_R=.0125;
+function buildWoman(){
+ const s=WSP,pv=C;
+ const W=(bone,fn)=>{C={bone,flags:0,refl:false,tj:.25,noUnder:false,ng:2};fn();};
+ W(B.SKIRT,()=>{sCyl([0,-.98,0],.42,.19,.96,.017*s,MAT.skirt,{aoF:(p,v)=>.55+.25*Math.sin(Math.atan2(p[2],p[0])*11)+.2*v});});
+ W(B.HIPS,()=>{sCyl([0,-.12,0],.25,.175,.14,.012*s,MAT.jacket,{aoF:(p,v)=>.6+.4*v});});
+ W(B.TORSO,()=>{sEll([0,.2,0],[.158,.25,.115],.011*s,MAT.jacket,{lon:true,aoF:d=>.62+.38*(d[1]*.5+.5)});
+  sEll([0,.418,0],[.135,.024,.108],.007*s,MAT.collar,{cut:d=>d[1]<-.3});sCyl([0,.39,0],.043,.04,.1,.006*s,MAT.skin,{aoF:(p,v)=>.35+.3*(1-v)});
+  for(let k=0;k<5;k++)feat(LG,[0,.05+k*.07,.114],[0,0,1],UP,.05,.012,MAT.dark,.6);});
+ W(B.HEAD,()=>{const hc=[0,.108,.012],hr=[.077,.103,.091];
+  sEll(hc,hr,.004*s,MAT.skin,{aoF:d=>.65+.35*clamp(d[2]+.5,0,1),cut:d=>d[1]>.45});
+  sEll([0,.058,.03],[.06,.052,.066],.004*s,MAT.skin,{cut:d=>d[1]>.3||d[2]<-.2,aoF:d=>.6+.4*clamp(d[2]+.3,0,1)});
+  sEll([0,.088,.091],[.0095,.021,.0105],.0026*s,MAT.skin,{cut:d=>d[2]<-.2});
+  sEll([.076,.09,-.012],[.009,.02,.012],.003*s,MAT.skin,{aoF:()=>.7});sEll([-.076,.09,-.012],[.009,.02,.012],.003*s,MAT.skin,{aoF:()=>.7});
+  C.tj=.6;
+  sEll([0,.19,-.02],[.09,.072,.102],.0055*s,MAT.turbB,{cut:d=>{const p=.19+d[1]*.072;return (p<.176&&d[2]>.05)||(p<.15&&Math.abs(d[0])>.55);},tdir:(d,n)=>Nz(X(n,[.6,.4,.7]))});
+  sEll([0,.247,-.045],[.07,.045,.078],.005*s,MAT.turbY,{tdir:(d,n)=>Nz(X(n,[0,.3,1]))});
+  C.tj=.25;
+  // face features painted as deliberate marks
+  const fp=(dx,dy)=>{const dz=Math.sqrt(Math.max(0,1-dx*dx-dy*dy));const d=[dx,dy,dz];return[[hc[0]+d[0]*hr[0],hc[1]+d[1]*hr[1],hc[2]+d[2]*hr[2]],Nz([d[0]/hr[0],d[1]/hr[1],d[2]/hr[2]])];};
+  for(const sg of[-1,1]){let[p,n]=fp(sg*.37,.1);feat(LG,p,n,[1,0,0],.027,.011,MAT.eyeW,.9);[p,n]=fp(sg*.33,.1);feat(LG,p,n,[1,0,0],.013,.013,MAT.eye,.9);[p,n]=fp(sg*.37,.13);feat(LG,p,n,[1,0,0],.028,.004,MAT.brow,.45);
+   [p,n]=fp(sg*.36,.145);feat(LG,p,n,[1,0,sg*.1],.022,.0028,MAT.brow,.7);[p,n]=fp(sg*.36,.265);feat(LG,p,n,[1,sg*.12,0],.026,.0035,MAT.brow,.8);
+   [p,n]=fp(sg*.33,.115);put(LI,p,n,[1,0,0],.0028,.0028,MAT.eyeW,1);
+   [p,n]=fp(sg*.45,-.16);feat(LG,p,n,[1,0,0],.045,.03,MAT.blush,.9);}
+  let[p,n]=fp(0,-.47);feat(LG,p,n,[1,0,0],.034,.011,MAT.lips,.85);[p,n]=fp(0,-.575);feat(LG,p,n,[1,0,0],.03,.015,MAT.lips,1);
+  [p,n]=fp(0,-.52);feat(LG,p,n,[1,0,0],.018,.0035,MAT.eye,.8);[p,n]=fp(.03,-.56);put(LI,p,n,[1,0,0],.0035,.0035,MAT.lips,1);
+  [p,n]=fp(0,-.28);feat(LG,p,n,[1,0,0],.022,.004,MAT.brow,.5);
+  // the pearl: glaze body + two always-on highlight beads (position follows the half-vector)
+  sEll(PEARL_POS,[PEARL_R,PEARL_R*1.15,PEARL_R],.0022*s,MAT.pearl,{aoF:d=>.4+.6*(d[1]*.5+.5)});
+  feat(LG,A(PEARL_POS,[0,.016,0]),[1,0,0],UP,.012,.0016,MAT.dark,.6);
+  C.flags=F_PEARL;L_put_pearl();C.flags=0;
+ });
+ W(B.TAIL,()=>{C.flags=F_DBL;sRect([-.04,0,0],[.085,0,0],[0,-.33,-.04],Nz([0,-.12,-1]),.006*s,MAT.turbY,{tv:true});sRect([-.035,-.02,-.004],[.07,0,0],[0,-.18,-.02],Nz([0,-.1,-1]),.006*s,MAT.turbB,{tv:true});});
+ for(const [ua,fa] of[[B.UAL,B.FAL],[B.UAR,B.FAR]]){
+  W(ua,()=>{sEll([0,-.14,0],[.052,.155,.052],.01*s,MAT.jacket,{lon:true});});
+  W(fa,()=>{sEll([0,-.12,0],[.043,.135,.043],.01*s,MAT.jacket,{lon:true});sEll([0,-.135,0],[.047,.018,.047],.006*s,MAT.collar);sEll([0,-.275,.005],[.03,.05,.025],.006*s,MAT.skin);});}
+ for(const f of[B.FOOTL,B.FOOTR])W(f,()=>{sEll([0,0,.04],[.045,.04,.11],.01*s,MAT.dark);});
+ W(B.BASKET,()=>{sCyl([0,-.3,0],.11,.14,.15,.011*s,(a,y)=>(Math.floor(a*9)+Math.floor(y*40))%2?MAT.basket:MAT.wood);sEll([0,-.15,0],[.13,.03,.13],.01*s,MAT.collar,{cut:d=>d[1]<0});
+  for(let a=0;a<=Math.PI;a+=.2)feat(LG,[Math.cos(a)*.12,-.15+Math.sin(a)*.14,0],[0,0,1],[-Math.sin(a),Math.cos(a),0],.05,.014,MAT.basket,.9);});
+ C=pv;
+}
+function L_put_pearl(){for(const sd of[.25,.75])LI.push(PEARL_POS,[1,0,0],UP,.0085,.0085,MAT.pearl,B.HEAD,F_PEARL,1,sd);}
+
+// ============================================================ GL helpers
+function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const log=gl.getShaderInfoLog(s);console.error(log,src.split('\n').map((l,i)=>(i+1)+': '+l).join('\n'));throw new Error(log);}return s;}
+function prog(vs,fs){const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+ ['aPos','aNrm','aTan','aSize','aInfo','aMisc'].forEach((n,i)=>gl.bindAttribLocation(p,i,n));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+ const u={};const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);for(let i=0;i<n;i++){const a=gl.getActiveUniform(p,i);u[a.name.replace('[0]','')]=gl.getUniformLocation(p,a.name);}return{p,u};}
+
+const COMMON=`
+#define WY ${WY.toFixed(3)}
+uniform vec3 uCam; uniform float uTime; uniform vec2 uWind; uniform vec3 uSunW; uniform vec3 uL;
+float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return s;}
+float cloudAt(vec2 p){p=p*0.00085+uWind;float a=.5,s=0.;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.07+vec2(17.1,9.2);a*=.48;}return s*1.07;}
+float cloudShadow(vec3 P){vec2 p=P.xz+uSunW.xz/uSunW.y*(1200.0-P.y);return smoothstep(0.43,0.68,cloudAt(p));}
+vec3 skyCol(vec3 d){
+ float h=clamp(d.y,0.,1.);
+ vec3 base=mix(vec3(.83,.82,.74),vec3(.40,.53,.72),pow(h,.55));
+ if(d.y<0.015) return mix(vec3(.60,.62,.57),base,smoothstep(-.06,.015,d.y));
+ vec2 p=uCam.xz+d.xz/(d.y+0.06)*(1200.0-uCam.y);
+ float c=cloudAt(p), c2=cloudAt(p+uSunW.xz/max(uSunW.y,.2)*-160.0);
+ float cov=smoothstep(.40,.62,c);
+ float lit=clamp(.58+(c-c2)*4.5,0.,1.);
+ vec3 cc=mix(vec3(.47,.50,.56),vec3(.97,.95,.87),lit);
+ cc=mix(cc,vec3(.40,.43,.48),smoothstep(.72,.95,c)*.45);
+ vec3 col=mix(base,cc,cov);
+ return mix(col,vec3(.84,.83,.76),(1.-smoothstep(0.,.22,d.y))*.45);
+}
+float groundH(vec2 p){float x=p.x,z=p.y,ax=abs(x),az=abs(z),m=max(ax,az);
+ if(m>54.5&&m<65.5){float al=ax>az?az:ax;if(al<1.6){float t=(m-54.5)/11.0;return .12+.75*sin(3.14159*t);}}
+ if(m>55.0&&m<65.0)return -3.0;
+ if(x>-34.0&&x<-26.0&&z>=65.0&&z<114.0){if(abs(z-68.0)<1.8)return .25;return -3.0;}
+ if(z>=114.0&&z<170.0&&ax<100.0){if(ax<2.5)return .55;return -3.0;}
+ if(z>=170.0&&ax<100.0&&z<520.0)return -.2;
+ if(m<=112.0||(z>0.0&&z<114.0&&ax<112.0))return 0.0;
+ if(z<-112.0&&ax<9.0)return ax<3.0?1.2:1.2-(ax-3.0)/6.0*1.6;
+ if(m>125.0&&mod(x+1000.0,40.0)<2.2&&!(z<-112.0&&ax<14.0))return -1.1;
+ return -.4;}
+int grassType(vec2 p){float x=p.x,z=p.y,ax=abs(x),az=abs(z),m=max(ax,az);
+ if(m<=112.0||(z>0.0&&z<114.0&&ax<112.0)){
+  if(m>86.5&&m<107.5&&!(z>95.0&&z<108.5&&ax<100.0)&&ax>4.5&&az>4.5)return 1;
+  if(max(abs(x-26.0),abs(z+34.0))<0.0)return 0;
+  return 0;}
+ if(z>=114.0&&z<170.0&&ax<100.0)return 0;
+ if(z<-112.0&&ax<3.3)return 0;
+ if(z>=170.0&&z<173.5&&ax<100.0)return 2;
+ if(z>=170.0&&ax<100.0)return 1;
+ if(m>125.0&&!(z<-112.0&&ax<14.0)){float d=mod(x+1000.0,40.0);if(d<2.2)return 0;if(d<3.4||d>39.0)return 2;}
+ if(max(abs(x+118.0),abs(z+118.0))<8.0)return 0;
+ return 1;}
+`;
+const VS=`#version 300 es
+precision highp float;precision highp int;precision highp sampler2D;
+layout(location=0) in vec3 aPos;layout(location=1) in vec4 aNrm;layout(location=2) in vec4 aTan;layout(location=3) in vec2 aSize;layout(location=4) in uvec4 aInfo;layout(location=5) in vec4 aMisc;
+uniform mat4 uVP;uniform vec3 uCamR,uCamU,uStudioWin;uniform float uFocal,uDensity,uMinPx,uMaxPx,uMaxGrow,uWomanInt,uPearlR,uSkyUnder;uniform int uLayer,uLayerBase;
+uniform sampler2D uBones,uMats;
+out vec2 vUV;flat out vec3 vCol;flat out float vAlpha;flat out float vSeed;flat out int vMode;flat out vec2 vLq;
+${COMMON}
+mat4 bone(int b){int i=b*4;return mat4(texelFetch(uBones,ivec2(i,0),0),texelFetch(uBones,ivec2(i+1,0),0),texelFetch(uBones,ivec2(i+2,0),0),texelFetch(uBones,ivec2(i+3,0),0));}
+void main(){
+ vec2 q=vec2(float(gl_VertexID&1),float(gl_VertexID>>1))*2.0-1.0;vUV=q;
+ uint fl=aInfo.z;float seed=float(aInfo.w)/255.0;vSeed=fract(seed*7.13+aMisc.y*3.1);
+ float rank=aMisc.x+aMisc.y/256.0,ao=aMisc.z,jit=aMisc.w;
+ vec4 mL=texelFetch(uMats,ivec2(int(aInfo.x),0),0),mS=texelFetch(uMats,ivec2(int(aInfo.x),1),0);
+ bool sky=uLayer==5;
+ vec3 P,N,T;
+ if(sky){vec3 d=normalize(aPos);P=uCam+d*2400.0;N=-d;T=aTan.xyz;}
+ else{mat4 Bm=bone(int(aInfo.y));P=(Bm*vec4(aPos,1.0)).xyz;N=normalize(mat3(Bm)*aNrm.xyz);T=mat3(Bm)*aTan.xyz;}
+ bool pearl=(fl&4u)!=0u;
+ if(pearl){vec3 V0=normalize(uCam-P);vec3 dir=jit<0.5?normalize(uL+V0):normalize(V0*0.55+vec3(0.0,-0.8,0.0));P+=dir*uPearlR*1.08;N=dir;T=normalize(cross(dir,vec3(0.31,0.17,0.93)));}
+ vec3 Pl=P,Nl=N;
+ bool refl=(fl&1u)!=0u;
+ float cull=1.0;
+ if(refl){if(Pl.y<WY)cull=0.0;P.y=2.0*WY-P.y;N.y=-N.y;T.y=-T.y;float dd=WY-P.y;P.x+=sin(P.y*2.4+uTime*1.1+P.z*.15)*.045*dd;P.z+=cos(P.y*2.0+uTime*.9+P.x*.13)*.045*dd;}
+ if(uLayer==3){P.xz+=T.xz*sin(uTime*.8+seed*40.0)*.07;}
+ vec3 toC=uCam-P;float dist=length(toC);vec3 V=toC/max(dist,1e-4);
+ bool dbl=(fl&2u)!=0u;float facing=dot(N,V);
+ if(dbl&&facing<0.0){N=-N;Nl=-Nl;facing=-facing;}
+ if(!sky&&!dbl&&!pearl)cull*=smoothstep(-0.06,0.1,facing);
+ float sz=sky?240.0*(1.0+1.3*uSkyUnder):12.0;float lenW=aSize.x*sz,widW=aSize.y*sz;
+ float grow=1.0,keep=1.0,shrink=1.0;
+ if(!sky&&!pearl){
+  float lenPx=lenW*uFocal/dist;float mn=uMinPx*(uLayer==4?0.55:1.0);
+  if(lenPx<mn){float g=mn/max(lenPx,1e-3);keep=1.0/(g*g);grow=min(g,uMaxGrow);}
+  shrink=min(1.0,uMaxPx*(uLayer==0?3.0:1.0)/(lenPx*grow));
+  keep*=uDensity;
+ }
+ float fade=pearl||sky?1.0:clamp((keep*1.3-rank)/(keep*0.3+1e-5),0.0,1.0);
+ float vis=cull*fade;
+ if(vis<0.003){gl_Position=vec4(2.0,2.0,2.0,1.0);vMode=9;return;}
+ vec3 Bv=cross(N,T);if(dot(Bv,Bv)<1e-6)Bv=cross(N,vec3(0.0,0.0,1.0));Bv=normalize(Bv);T=cross(Bv,N);
+ if(!sky){float layer=float(uLayerBase+int(aInfo.w&7u));P+=V*layer*(dist*0.00025+dist*dist*3.0e-7);}
+ float hl=lenW*grow*shrink*0.5,hw=widW*grow*shrink*0.5;
+ gl_Position=uVP*vec4(P+T*q.x*hl+Bv*q.y*hw,1.0);
+ vec3 Ls=normalize(-uCamR+uCamU);vLq=normalize(vec2(dot(Ls,T),dot(Ls,Bv))+1e-4);
+ // ---- paint colour: two pigments (light / shadow) chosen by received light
+ vec3 lit=mL.rgb,shd=mS.rgb;
+ bool woman=aInfo.y>=1u&&aInfo.y<=12u;
+ bool interior=(fl&16u)!=0u||(woman&&uWomanInt>0.5);
+ float ndl=dot(Nl,uL),wrapL=clamp(ndl*0.6+0.42,0.0,1.0),sun=1.0;
+ if(interior){float dw=length(Pl-uStudioWin);sun=clamp(1.5*exp(-dw*0.15),0.0,1.25);wrapL=clamp(ndl*0.95+0.12,0.0,1.0);}
+ else if(!sky)sun=1.0-0.62*cloudShadow(Pl);
+ float light=wrapL*sun*(0.32+0.68*ao);
+ float t=smoothstep(0.08,0.9,light+(jit-0.5)*0.09);
+ vec3 col=mix(shd,lit,t);
+ vec3 h3=vec3(fract(seed*17.13),fract(seed*31.71),fract(seed*7.37))-0.5;
+ col*=1.0+h3*0.09+(jit-0.5)*0.1;
+ col=mix(col,col*vec3(0.9,1.0,0.82),(1.0-t)*0.5);
+ bool haze=(fl&8u)!=0u;
+ if(haze){float hz=smoothstep(500.0,1400.0,dist);col=mix(col,vec3(0.74,0.77,0.74),hz*0.6);}
+ else if(!sky){float dk=smoothstep(60.0,560.0,dist);col=mix(col,vec3(0.07,0.09,0.065),dk*(0.82-0.5*t));}
+ float alpha=mL.a;int mode=1;
+ if(uLayer==0){mode=0;col=woman?col*0.9:mix(col*0.78,vec3(0.16,0.12,0.08),0.2)*(0.82+0.28*t);}
+ if(refl){col=mix(col*0.62,vec3(0.05,0.08,0.065),0.32);}
+ if(uLayer==3){vec3 Rv=reflect(-V,vec3(0,1,0));vec3 sc=skyCol(Rv);float fr=0.18+0.82*pow(1.0-max(V.y,0.0),4.0);
+  col=mix(vec3(0.07,0.105,0.085),sc*0.86,0.3+0.55*fr)*(0.72+0.28*sun);alpha=mix(0.3,0.88,fr);mode=2;
+  col=mix(col,vec3(0.07,0.09,0.065),smoothstep(150.0,700.0,dist)*0.5);}
+ if(uLayer==4){mode=3;float spec=pow(max(dot(reflect(-uL,Nl),V),0.0),6.0);
+  col=mix(lit,vec3(0.97,0.95,0.88),0.65)*(0.85+0.3*spec);alpha=smoothstep(0.42,0.82,light)*(0.55+0.6*spec);
+  if((fl&32u)!=0u)alpha=smoothstep(0.55,1.0,sin(uTime*1.7+seed*60.0+Pl.x*.7))*(0.4+0.6*sun);
+  if(pearl){alpha=jit<0.5?1.0:0.7;col=jit<0.5?vec3(1.0,0.99,0.95):vec3(0.86,0.86,0.82);}}
+ if(sky){col=skyCol(normalize(aPos));alpha=0.82;mode=uSkyUnder>0.5?0:4;}
+ vCol=col;vAlpha=clamp(alpha,0.0,1.0)*vis;vMode=mode;
+}`;
+const FS=`#version 300 es
+precision highp float;precision highp int;
+in vec2 vUV;flat in vec3 vCol;flat in float vAlpha;flat in float vSeed;flat in int vMode;flat in vec2 vLq;
+out vec4 o;
+float hh(float x){return fract(sin(x*127.1)*43758.5453);}
+float nn(float x){float i=floor(x),f=fract(x);f=f*f*(3.0-2.0*f);return mix(hh(i),hh(i+1.0),f);}
+void main(){
+ if(vMode==9)discard;
+ vec2 q=vUV;float s=vSeed*97.0;
+ if(vMode==3){float r2=dot(q,q);if(r2>1.0)discard;vec3 n=vec3(q,sqrt(1.0-r2));float d=dot(n,normalize(vec3(vLq,0.9)));
+  vec3 c=vCol*(0.66+0.42*d)+pow(max(d,0.0),18.0)*0.4;float a=vAlpha*smoothstep(1.0,0.72,r2);o=vec4(c*a,a);return;}
+ float u=q.x,v=q.y;
+ float w=1.0-0.42*smoothstep(0.3,1.0,u)-0.3*smoothstep(-0.55,-1.0,u);w*=0.9+0.1*sin(u*4.0+s);
+ float av=abs(v)/max(w,0.05);if(av>1.0)discard;
+ float head=smoothstep(-1.0,-0.8,u+av*av*0.12);
+ // nine bristles per stroke
+ float bp=(v/w*0.5+0.5)*9.0,bi=floor(bp),bf=fract(bp),bs=hh(bi*13.7+s);
+ float dryAt=0.45+0.5*bs,dry=1.0-smoothstep(dryAt-0.3,dryAt+0.12,u);
+ float prof=smoothstep(0.0,0.3,bf)*smoothstep(1.0,0.7,bf);
+ float grain=nn(u*14.0+bi*5.1+s);
+ float body=vMode==0?1.0:vMode==1?mix(dry,1.0,0.62):vMode==2?dry:mix(dry,1.0,0.3);
+ float cover=head*body*(0.7+0.3*prof)*(0.82+0.32*grain)*smoothstep(1.0,0.75,av);
+ float ridge=(prof-0.5)*0.1+(bs-0.5)*0.12+(grain-0.5)*0.1;if(vMode==1)ridge*=0.55;
+ vec3 c=vCol*(1.0+ridge);
+ if(vMode==0||vMode==5){if(cover<0.3+0.7*(1.0-vAlpha))discard;o=vec4(c,1.0);return;}
+ float a=vAlpha*cover;if(a<0.004)discard;o=vec4(c*a,a);
+}`;
+const GVS=`#version 300 es
+precision highp float;precision highp int;
+uniform mat4 uVP;uniform vec2 uGC;uniform int uGN;uniform float uCell,uFocal;
+out vec2 vUV;flat out vec3 vCol;flat out float vAlpha;flat out float vSeed;flat out int vMode;flat out vec2 vLq;
+${COMMON}
+void main(){
+ vec2 q=vec2(float(gl_VertexID&1),float(gl_VertexID>>1))*2.0-1.0;vUV=q;vMode=5;vLq=vec2(0,1);
+ int id=gl_InstanceID,ix=id%uGN,iz=id/uGN;float N=float(uGN);
+ vec2 cell=vec2(float(ix)+N*floor((uGC.x-float(ix))/N+0.5),float(iz)+N*floor((uGC.y-float(iz))/N+0.5));
+ float r1=h21(cell*0.917+3.1),r2=h21(cell*1.13+7.7),r3=h21(cell*0.71+1.9),r4=h21(cell*1.37+5.3),r5=h21(cell*0.53+9.1);
+ vec2 xz=(cell+vec2(r1,r2))*uCell;
+ int gt=grassType(xz);
+ float d=length(xz-uGC*uCell),Rr=N*uCell*0.5,edge=1.0-smoothstep(Rr*0.55,Rr*0.95,d);
+ vec3 base=vec3(xz.x,groundH(xz),xz.y);
+ float dist=length(uCam-base);
+ float reed=gt==2?1.0:0.0;
+ float wid=mix(0.045,0.07,reed)*(0.7+0.6*r4);
+ float px=wid*uFocal/dist,keep=1.0;if(px<2.2){float g=2.2/px;wid*=min(g,3.0);keep=1.0/(g*g)*2.0;}
+ if(gt==0||edge<=0.0||r5>keep){gl_Position=vec4(2,2,2,1);vMode=9;return;}
+ float hgt=mix(0.16+0.3*r3,1.1+0.8*r3,reed)*edge;
+ float yaw=r4*6.2832;vec3 side=vec3(cos(yaw),0.0,sin(yaw));
+ float wv=sin(uTime*1.3+xz.x*0.21+xz.y*0.17)+0.5*sin(uTime*2.3+xz.x*0.5);
+ vec3 upv=normalize(vec3(0.3*wv*(0.4+reed*0.6)+(r1-0.5)*0.5,1.0,0.15*wv+(r2-0.5)*0.5));
+ float t=q.x*0.5+0.5;
+ vec3 W=base+upv*hgt*t+side*wid*q.y*(1.0-0.7*t);
+ W+=normalize(uCam-W)*(dist*0.00025*2.0);
+ gl_Position=uVP*vec4(W,1.0);
+ vec3 Nn=normalize(cross(side,upv));if(dot(Nn,uCam-W)<0.0)Nn=-Nn;
+ float sun=1.0-0.62*cloudShadow(base);
+ float light=clamp(dot(Nn,uL)*0.4+0.55,0.0,1.0)*sun*(0.4+0.6*t);
+ vec3 lit=mix(vec3(0.50,0.54,0.28),vec3(0.68,0.62,0.37),reed*0.7+r3*0.3),shd=vec3(0.13,0.17,0.09);
+ vec3 col=mix(shd,lit,smoothstep(0.1,0.8,light+(r3-0.5)*0.2));
+ col=mix(col,vec3(0.07,0.09,0.065),smoothstep(60.0,560.0,dist)*0.6);
+ vCol=col;vAlpha=1.0;vSeed=r3;
+}`;
+
+// ============================================================ build
+const lmsg=$('#lmsg'),lbar=$('#bar i');
+const tick=()=>new Promise(r=>setTimeout(r,0));
+let physKind='built-in';
+async function build(){
+ lmsg.textContent='Laying the underpainting…';await tick();
+ const base=Math.sqrt(units*2.45/BUDGET);
+ for(let i=0;i<jobs.length;i++){const jb=jobs[i];C=jb.ctx;jb.fn(base*jb.rel);if(i%400===0){lbar.style.width=(i/jobs.length*90).toFixed(1)+'%';await tick();}}
+ C={bone:0,flags:0,refl:false,tj:.35,noUnder:false};
+ lmsg.textContent='Painting her…';await tick();buildWoman();
+ lbar.style.width='95%';await tick();
+ return base;
+}
+
+// ---- GPU resources
+const progS=prog(VS,FS),progG=prog(GVS,FS);
+const MAXB=48;const boneData=new Float32Array(MAXB*16);for(let b=0;b<MAXB;b++){boneData[b*16]=boneData[b*16+5]=boneData[b*16+10]=boneData[b*16+15]=1;}
+const boneTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,boneTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,MAXB*4,1,0,gl.RGBA,gl.FLOAT,boneData);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+const matData=new Uint8Array(NMAT*2*4);MATS.forEach((m,i)=>{for(let k=0;k<3;k++){matData[i*4+k]=m.lit[k]*255;matData[(NMAT+i)*4+k]=m.shd[k]*255;}matData[i*4+3]=m.alpha*255;matData[(NMAT+i)*4+3]=255;});
+const matTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,matTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,NMAT,2,0,gl.RGBA,gl.UNSIGNED_BYTE,matData);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+function vaoFor(L){const vao=gl.createVertexArray();gl.bindVertexArray(vao);const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(L.buf,0,L.n*STRIDE),gl.STATIC_DRAW);
+ const at=(i,n,t,norm,off)=>{gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,n,t,norm,STRIDE,off);gl.vertexAttribDivisor(i,1);};
+ at(0,3,gl.FLOAT,false,0);at(1,4,gl.BYTE,true,12);at(2,4,gl.BYTE,true,16);at(3,2,gl.UNSIGNED_SHORT,true,20);
+ gl.enableVertexAttribArray(4);gl.vertexAttribIPointer(4,4,gl.UNSIGNED_BYTE,STRIDE,24);gl.vertexAttribDivisor(4,1);at(5,4,gl.UNSIGNED_BYTE,true,28);
+ gl.bindVertexArray(null);const n=L.n;L.buf=null;L.f=L.i8=L.u16=L.u8=null;return{vao,n};}
+const emptyVAO=gl.createVertexArray();
+
+// ============================================================ physics
+const PH={kind:'built-in',rap:null};
+const CH={x:-30,y:0,z:52,vy:0,grounded:true};
+function builtinStep(mx,mz,dt){
+ CH.vy-=9.81*dt;let nx=CH.x+mx,nz=CH.z+mz,ny=CH.y+CH.vy*dt;const r=.3;
+ for(let it=0;it<2;it++)for(const b of BOX){if(b.y1<=ny+.33||b.y0>=ny+1.7)continue;
+  const cx=clamp(nx,b.x0,b.x1),cz=clamp(nz,b.z0,b.z1),dx=nx-cx,dz=nz-cz,d2=dx*dx+dz*dz;
+  if(d2<r*r){if(d2>1e-9){const d=Math.sqrt(d2);nx=cx+dx/d*r;nz=cz+dz/d*r;}else{const o=[nx-b.x0,b.x1-nx,nz-b.z0,b.z1-nz],m=Math.min(...o);if(m===o[0])nx=b.x0-r;else if(m===o[1])nx=b.x1+r;else if(m===o[2])nz=b.z0-r;else nz=b.z1+r;}}}
+ let g=groundH(nx,nz);for(const b of BOX){if(nx>b.x0-.15&&nx<b.x1+.15&&nz>b.z0-.15&&nz<b.z1+.15&&b.y1<=ny+.35&&b.y1>g)g=b.y1;}
+ const wasG=CH.grounded;
+ if(ny<=g||(wasG&&CH.vy<=0&&ny-g<.3)){ny=g;CH.vy=0;CH.grounded=true;}else CH.grounded=false;
+ CH.x=nx;CH.y=ny;CH.z=nz;
+}
+async function initRapier(){
+ try{
+  const mod=await Promise.race([import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js'),new Promise((_,rj)=>setTimeout(()=>rj(new Error('timeout')),12000))]);
+  const RA=mod.default||mod;await RA.init();
+  const world=new RA.World({x:0,y:-9.81,z:0});
+  const hf=(N,SZ,fn)=>{const h=new Float32Array((N+1)*(N+1));for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const x=-SZ/2+j*SZ/N,z=-SZ/2+i*SZ/N;h[j*(N+1)+i]=fn(x,z);}world.createCollider(RA.ColliderDesc.heightfield(N,N,h,{x:SZ,y:1,z:SZ}));};
+  hf(640,320,groundH);                                                     // town at 0.5 m
+  hf(280,1120,(x,z)=>Math.max(Math.abs(x),Math.abs(z))<156?-6:groundH(x,z)); // polder at 4 m, sunk under the town patch
+  for(const [x,z,hx,hz] of[[0,-1660,2400,1100],[0,1660,2400,1100],[-1660,0,1100,600],[1660,0,1100,600]])world.createCollider(RA.ColliderDesc.cuboid(hx,1,hz).setTranslation(x,-1.4,z));
+  for(const b of BOX)world.createCollider(RA.ColliderDesc.cuboid((b.x1-b.x0)/2,(b.y1-b.y0)/2,(b.z1-b.z0)/2).setTranslation((b.x0+b.x1)/2,(b.y0+b.y1)/2,(b.z0+b.z1)/2));
+  const body=world.createRigidBody(RA.RigidBodyDesc.kinematicPositionBased().setTranslation(CH.x,CH.y+.86,CH.z));
+  const col=world.createCollider(RA.ColliderDesc.capsule(.55,.3),body);
+  const ctrl=world.createCharacterController(.03);ctrl.enableAutostep(.3,.2,true);ctrl.enableSnapToGround(.35);ctrl.setMaxSlopeClimbAngle(50*Math.PI/180);ctrl.setMinSlopeSlideAngle(60*Math.PI/180);
+  // sanity: a ray straight down in the harbour must find water depth, on the polder the -0.4 ground
+  const ray=(x,z)=>{const h=world.castRay(new RA.Ray({x,y:20,z},{x:0,y:-1,z:0}),60,true);return h?20-(h.timeOfImpact??h.toi):null;};
+  world.step();
+  const hHarb=ray(40.37,140.61),hPold=ray(240.61,40.37);
+  if(hHarb===null||hPold===null||Math.abs(hHarb-groundH(40.37,140.61))>.6||Math.abs(hPold-groundH(240.61,40.37))>.6)throw new Error('heightfield orientation mismatch '+hHarb+' '+hPold);
+  PH.rap={RA,world,body,col,ctrl};PH.kind='Rapier';PH.checks={hHarb,hPold};
+ }catch(e){console.warn('Rapier unavailable, using built-in physics:',e.message);PH.kind='built-in';PH.err=e.message;}
+}
+function physStep(mx,mz,dt){
+ if(PH.rap){const{world,body,col,ctrl}=PH.rap;CH.vy-=9.81*dt;
+  ctrl.computeColliderMovement(col,{x:mx,y:CH.vy*dt,z:mz});const m=ctrl.computedMovement();const p=body.translation();
+  const np={x:p.x+m.x,y:p.y+m.y,z:p.z+m.z};body.setNextKinematicTranslation(np);world.timestep=dt;world.step();
+  const g=ctrl.computedGrounded();if(g&&CH.vy<0)CH.vy=0;if(!g&&m.y>CH.vy*dt*.5&&CH.vy>0&&Math.abs(m.y)<1e-4)CH.vy=0;CH.grounded=g;CH.x=np.x;CH.y=np.y-.86;CH.z=np.z;}
+ else builtinStep(mx,mz,dt);
+}
+function teleport(x,y,z){CH.x=x;CH.y=y;CH.z=z;CH.vy=0;if(PH.rap)PH.rap.body.setTranslation({x,y:y+.86,z},true);}
+
+// ============================================================ protagonist state + animation
+const WS={yaw:Math.PI/2,speed:0,phase:0,idle:0,look:0,auto:true,pause:0,pausedAt:-1,lastPause:-99,headYaw:0,torsoYaw:0,headPitch:0,tailX:.2,tailV:0,air:0,manualT:0};
+const PERIM=416;
+function pathPoint(s){s=((s%PERIM)+PERIM)%PERIM;const k=Math.floor(s/104),f=(s-k*104)/104,a=PATH[k],b=PATH[(k+1)%4];return[lerp(a[0],b[0],f),lerp(a[1],b[1],f)];}
+function nearestS(x,z){let best=0,bd=1e9;for(let s=0;s<PERIM;s+=1){const p=pathPoint(s),d=(p[0]-x)**2+(p[1]-z)**2;if(d<bd){bd=d;best=s;}}return best;}
+let autoS=nearestS(CH.x,CH.z);
+function obstacleAhead(dirx,dirz){for(const b of BOX){if(!b.jump)continue;if(b.y1<CH.y+.18||b.y1>CH.y+1.05)continue;
+ for(let d=.5;d<=1.5;d+=.25){const x=CH.x+dirx*d,z=CH.z+dirz*d;if(x>b.x0-.3&&x<b.x1+.3&&z>b.z0-.3&&z<b.z1+.3)return true;}}return false;}
+function womanMatrices(){
+ const w=WS,ph=w.phase,sp=clamp(w.speed/3.6,0,1),walk=clamp(w.speed/1.4,0,1),air=w.air;
+ const bob=walk*.028*Math.abs(Math.sin(ph))*(1-air)-.0;
+ const root=ch(M4.T(CH.x,CH.y,CH.z),M4.RY(w.yaw));
+ const breathe=Math.sin(performance.now()/1000*1.6)*.006;
+ const hips=ch(root,M4.T(0,1.0+bob,0),M4.RY(Math.sin(ph)*.07*walk-w.torsoYaw*.25));
+ const skirt=ch(hips,M4.RX(-.05*walk-.08*sp+Math.sin(ph*2)*.025*walk+air*.08),M4.RZ(Math.sin(ph)*.045*walk));
+ const torso=ch(hips,M4.RY(w.torsoYaw-Math.sin(ph)*.05*walk),M4.RX(.04*sp+breathe));
+ const head=ch(torso,M4.T(0,.458,0),M4.RY(w.headYaw),M4.RX(w.headPitch),M4.RZ(w.look*.11-Math.sin(ph)*.02*walk));
+ const tail=ch(head,M4.T(0,.24,-.1),M4.RX(w.tailX),M4.RZ(Math.sin(ph)*.12*walk));
+ const sw=Math.sin(ph)*(.35*walk+.25*sp);
+ const uaL=ch(torso,M4.T(.175,.38,0),M4.RX(sw-air*.6),M4.RZ(.09+air*.25));
+ const faL=ch(uaL,M4.T(0,-.28,0),M4.RX(-.2-.25*sp));
+ const uaR=ch(torso,M4.T(-.175,.38,0),M4.RX(-sw*.35-.1-air*.4),M4.RZ(-.12-air*.2));
+ const faR=ch(uaR,M4.T(0,-.28,0),M4.RX(-1.0));
+ const hand=M4.pt(faR,[0,-.27,.02]);
+ const basket=ch(M4.T(hand[0],hand[1],hand[2]),M4.RY(w.yaw),M4.RX(Math.sin(ph)*.12*walk));
+ const st=.24*walk+.2*sp,lift=.07*walk;
+ const fL=ch(root,M4.T(.09,.045+Math.max(0,Math.cos(ph))*lift+air*.18,Math.sin(ph)*st));
+ const fR=ch(root,M4.T(-.09,.045+Math.max(0,-Math.cos(ph))*lift+air*.18,-Math.sin(ph)*st));
+ const set=(i,m)=>boneData.set(m,i*16);
+ set(B.HIPS,hips);set(B.SKIRT,skirt);set(B.TORSO,torso);set(B.HEAD,head);set(B.TAIL,tail);set(B.UAL,uaL);set(B.FAL,faL);set(B.UAR,uaR);set(B.FAR,faR);set(B.FOOTL,fL);set(B.FOOTR,fR);set(B.BASKET,basket);
+}
+function worldBones(t){
+ const [mx,mz]=MILL,dir=Nz([-1,0,-1]),hub=[mx+dir[0]*3.3,15.2,mz+dir[2]*3.3],xA=Nz(X(UP,dir));
+ boneData.set(ch(M4.basis(xA,UP,dir,hub),M4.RZ(t*.55)),BM_MILL*16);
+ BARGES.forEach((b,i)=>boneData.set(ch(M4.T(b[0],WY+Math.sin(t*.7+i)*.05,b[1]),M4.RY(b[2]),M4.RZ(Math.sin(t*.5+i*2)*.02),M4.RX(Math.sin(t*.43+i)*.012)),(BM_BARGE+i)*16));
+ COWS.forEach((c,i)=>{const body=ch(M4.T(c.x,groundH(c.x,c.z),c.z),M4.RY(c.yaw));boneData.set(body,(BM_COW+i*2)*16);
+  const graze=.5+.5*Math.sin(t*.35+c.ph);boneData.set(ch(body,M4.T(0,1.25,.85),M4.RX(lerp(-.15,.95,graze)),M4.RY(Math.sin(t*.9+c.ph)*.2*(1-graze))),(BM_COW+i*2+1)*16);});
+}
+
+// ============================================================ input
+const keys={};let joy={x:0,y:0,active:false},jumpReq=false;
+addEventListener('keydown',e=>{if(e.target.tagName==='BUTTON'&&(e.code==='Space'||e.code==='Enter'))return;keys[e.code]=true;if(e.code==='Space'){jumpReq=true;e.preventDefault();}if(e.code==='KeyT')toggleTour();
+ if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){setAuto(false);if(tour.on)toggleTour();}});
+addEventListener('keyup',e=>{keys[e.code]=false;});
+const cam={yaw:WS.yaw+Math.PI,pitch:.3,dist:5.2,lastDrag:-99,pos:[0,0,0],tgt:[0,0,0]};
+const ptrs=new Map();let pinch0=0,dist0=0;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});if(ptrs.size===2){const[a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);dist0=cam.dist;}});
+canvas.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
+ if(ptrs.size===1){const dx=e.clientX-p.x,dy=e.clientY-p.y;cam.yaw-=dx*.006;cam.pitch=clamp(cam.pitch+dy*.005,-.25,1.35);cam.lastDrag=now;}
+ p.x=e.clientX;p.y=e.clientY;
+ if(ptrs.size===2){const[a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0)cam.dist=clamp(dist0*pinch0/d,1.1,40);}});
+const endPtr=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch0=0;};
+canvas.addEventListener('pointerup',endPtr);canvas.addEventListener('pointercancel',endPtr);
+canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist=clamp(cam.dist*Math.exp(e.deltaY*.0012),1.1,40);},{passive:false});
+const joyEl=$('#joy'),knob=$('#knob');
+joyEl.addEventListener('pointerdown',e=>{joyEl.setPointerCapture(e.pointerId);joy.active=true;joyMove(e);setAuto(false);if(tour.on)toggleTour();});
+joyEl.addEventListener('pointermove',e=>{if(joy.active)joyMove(e);});
+const joyEnd=()=>{joy={x:0,y:0,active:false};knob.style.transform='';};joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
+function joyMove(e){const r=joyEl.getBoundingClientRect();let x=(e.clientX-r.left-r.width/2)/(r.width/2),y=(e.clientY-r.top-r.height/2)/(r.height/2);const l=Math.hypot(x,y);if(l>1){x/=l;y/=l;}joy.x=x;joy.y=y;knob.style.transform=`translate(${x*40}px,${y*40}px)`;}
+$('#jump').addEventListener('pointerdown',e=>{e.preventDefault();jumpReq=true;});
+const bAuto=$('#bAuto'),bTour=$('#bTour'),bHelp=$('#bHelp');
+function setAuto(v){WS.auto=v;bAuto.setAttribute('aria-pressed',v);if(v){autoS=nearestS(CH.x,CH.z);}}
+bAuto.onclick=()=>{setAuto(!WS.auto);if(tour.on)toggleTour();};
+bHelp.onclick=()=>{const on=$('#help').classList.toggle('on');bHelp.setAttribute('aria-expanded',on);};
+
+// ============================================================ camera tour
+const TOUR=[
+ [0,[-62,9,232],[-12,16,108],'The harbour'],[8,[-14,7,224],[0,18,106]],[16,[34,9,212],[6,18,106]],
+ [23,[14,15,142],[0,10,100],''],[28,[-16,18,104],[-30,4,72]],[33,[-30,4.5,63],[0,3,60],'Along the canals'],[40,[30,4,60],[60,3.5,58]],
+ [45,[60,8,40],[60,4,0]],[50,[34,24,14],[0,4,-10],'The market'],[56,[12,5.5,16],[-6,3,-14]],[62,[-12,6,10],[6,2,-6]],
+ [68,[-14,3,20],[-24,2,30],'The studio window'],[72,[-21.5,1.8,30],[-30,1.8,30]],[76,[-25.6,1.8,30.1],[-33,2.1,29]],[82,[-28.4,1.75,33.6],[-34,2.4,29]],
+ [88,[-33.4,1.7,29.2],[-31,1.5,26.3],'The pearl'],[96,[-32.6,1.65,27.1],[-31.0,1.56,26.2]],[104,[-31.92,1.64,26.46],[-31.0,1.6,26.2]],[112,[-31.92,1.64,26.46],[-31.0,1.6,26.2]]];
+const tour={on:false,t:0,cap:''};
+function crv(a,b,c,d,t){const t2=t*t,t3=t2*t;return a.map((_,i)=>.5*((2*b[i])+(-a[i]+c[i])*t+(2*a[i]-5*b[i]+4*c[i]-d[i])*t2+(-a[i]+3*b[i]-3*c[i]+d[i])*t3));}
+function tourAt(t){let i=0;while(i<TOUR.length-2&&TOUR[i+1][0]<=t)i++;const k0=TOUR[Math.max(0,i-1)],k1=TOUR[i],k2=TOUR[i+1],k3=TOUR[Math.min(TOUR.length-1,i+2)];
+ const u=clamp((t-k1[0])/(k2[0]-k1[0]),0,1);let cap='';for(const k of TOUR)if(k[0]<=t&&k[3]!==undefined)cap=k[3];return{pos:crv(k0[1],k1[1],k2[1],k3[1],u),tgt:crv(k0[2],k1[2],k2[2],k3[2],u),cap};}
+function toggleTour(){tour.on=!tour.on;tour.t=0;bTour.setAttribute('aria-pressed',tour.on);
+ if(tour.on){setAuto(false);teleport(-31,0,26.2);WS.yaw=Math.PI;WS.speed=0;WS.idle=0;}
+ else{$('#caption').style.opacity=0;cam.yaw=WS.yaw+Math.PI;}}
+bTour.onclick=toggleTour;
+
+// ============================================================ frame
+let now=0,last=performance.now(),scale=1,density=1,fpsAcc=0,fpsN=0,fpsT=0,fps=60,VAOS=null,started=false;
+const GN=GRASS_N,GCELL=.22;
+function resize(){const dpr=Math.min(devicePixelRatio||1,IS_TOUCH?3:2);const w=Math.max(1,Math.round(innerWidth*dpr*scale)),h=Math.max(1,Math.round(innerHeight*dpr*scale));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}}
+function camCollide(t,p){const d=S(p,t),L=Ln(d),dir=K(d,1/L);let best=L;
+ for(const b of BOX){if(!b.cam)continue;let t0=0,t1=best;let ok=true;for(let a=0;a<3;a++){const o=t[a],v=dir[a],mn=[b.x0,b.y0,b.z0][a],mx=[b.x1,b.y1,b.z1][a];
+  if(Math.abs(v)<1e-8){if(o<mn||o>mx){ok=false;break;}continue;}let ta=(mn-o)/v,tb=(mx-o)/v;if(ta>tb)[ta,tb]=[tb,ta];t0=Math.max(t0,ta);t1=Math.min(t1,tb);if(t0>t1){ok=false;break;}}
+  if(ok&&t0>0.05&&t0<best)best=t0;}
+ return best<L?A(t,K(dir,Math.max(.6,best-.25))):p;}
+function update(dt){
+ const t=now/1000;
+ // ---- movement intent
+ let mf=0,ms=0;if(keys.KeyW||keys.ArrowUp)mf+=1;if(keys.KeyS||keys.ArrowDown)mf-=1;if(keys.KeyD||keys.ArrowRight)ms+=1;if(keys.KeyA||keys.ArrowLeft)ms-=1;
+ if(joy.active){mf=-joy.y;ms=joy.x;}
+ let run=keys.ShiftLeft||keys.ShiftRight||(joy.active&&Math.hypot(joy.x,joy.y)>.92);
+ let dirx=0,dirz=0,want=0;
+ if(tour.on){want=0;}
+ else if(WS.auto&&!mf&&!ms){
+  if(WS.pause>0){WS.pause-=dt;want=0;}
+  else{
+   let s=autoS;let best=s,bd=1e9;for(let k=-4;k<=8;k+=.5){const p=pathPoint(s+k),d=(p[0]-CH.x)**2+(p[1]-CH.z)**2;if(d<bd){bd=d;best=s+k;}}autoS=((best%PERIM)+PERIM)%PERIM;
+   const tp=pathPoint(autoS+2.6);dirx=tp[0]-CH.x;dirz=tp[1]-CH.z;const l=Math.hypot(dirx,dirz)||1;dirx/=l;dirz/=l;want=1.35;
+   for(const ps of[52,156,260,364]){const dd=autoS-ps;if(dd>0&&dd<1.2&&t-WS.lastPause>20){WS.pause=7;WS.lastPause=t;}}
+   if(CH.grounded&&obstacleAhead(Math.sin(WS.yaw),Math.cos(WS.yaw)))jumpReq=true;
+  }
+ } else if(mf||ms){const fx=-Math.sin(cam.yaw),fz=-Math.cos(cam.yaw),rx=Math.cos(cam.yaw),rz=-Math.sin(cam.yaw);dirx=fx*mf+rx*ms;dirz=fz*mf+rz*ms;const l=Math.hypot(dirx,dirz)||1;dirx/=l;dirz/=l;want=run?3.6:1.45;}
+ WS.speed=lerp(WS.speed,want,1-Math.exp(-dt*(want>WS.speed?4:6)));
+ if(want>0){const ty=Math.atan2(dirx,dirz);let dy=ty-WS.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));WS.yaw+=dy*(1-Math.exp(-dt*7));}
+ if(jumpReq&&CH.grounded&&!tour.on){CH.vy=4.7;CH.grounded=false;}jumpReq=false;
+ const mvx=Math.sin(WS.yaw)*WS.speed*dt,mvz=Math.cos(WS.yaw)*WS.speed*dt;
+ physStep(mvx,mvz,Math.min(dt,1/30));
+ if(CH.y<-2.5||Math.abs(CH.x)>500||Math.abs(CH.z)>500){const s=nearestS(CH.x,CH.z),p=pathPoint(s);teleport(p[0],.2,p[1]);}
+ WS.air=lerp(WS.air,CH.grounded?0:1,1-Math.exp(-dt*10));
+ WS.phase+=WS.speed/1.3*Math.PI*dt*(1-WS.air*.7);
+ WS.idle=WS.speed<.08&&CH.grounded?WS.idle+dt:0;
+ // ---- the over-the-shoulder look
+ const lookTarget=WS.idle>2.2?1:0;WS.look=lerp(WS.look,lookTarget,1-Math.exp(-dt*(lookTarget?1.6:4)));
+ const hp=[CH.x,CH.y+1.6,CH.z],dc=S(cam.pos,hp),c=Math.cos(WS.yaw),s=Math.sin(WS.yaw);
+ const lx=dc[0]*c-dc[2]*s,lz=dc[0]*s+dc[2]*c;const a=Math.atan2(lx,lz);const turn=clamp(a,-2.0,2.0)*WS.look;
+ WS.torsoYaw=clamp(turn*.3,-.55,.55);WS.headYaw=clamp(turn-WS.torsoYaw,-1.45,1.45);
+ WS.headPitch=-clamp(Math.atan2(dc[1],Math.hypot(dc[0],dc[2])),-.4,.4)*.5*WS.look;
+ // turban tail: damped pendulum driven by speed and jumping
+ const tgtTail=.18+WS.speed*.12+WS.air*.5-(CH.vy>0?.3:0);WS.tailV+=(tgtTail-WS.tailX)*dt*30-WS.tailV*dt*4;WS.tailX+=WS.tailV*dt;
+ womanMatrices();worldBones(t);
+ // ---- camera
+ if(tour.on){tour.t+=dt;const k=tourAt(tour.t);cam.pos=k.pos;cam.tgt=k.tgt;if(k.cap!==tour.cap){tour.cap=k.cap;const el=$('#caption');el.style.opacity=0;if(k.cap)setTimeout(()=>{el.textContent=k.cap;el.style.opacity=1;},400);}
+  if(tour.t>TOUR[TOUR.length-1][0]+3)tour.t=TOUR[TOUR.length-1][0]+3;}
+ else{
+  if(WS.auto&&now-cam.lastDrag>2500&&WS.speed>.3){let dy=(WS.yaw+Math.PI)-cam.yaw;dy=Math.atan2(Math.sin(dy),Math.cos(dy));cam.yaw+=dy*(1-Math.exp(-dt*.8));}
+  const tg=[CH.x,CH.y+1.35,CH.z],cp=Math.cos(cam.pitch);
+  let p=A(tg,K([Math.sin(cam.yaw)*cp,Math.sin(cam.pitch),Math.cos(cam.yaw)*cp],cam.dist));
+  p=camCollide(tg,p);const gh=groundH(p[0],p[2]);if(p[1]<gh+.35)p[1]=gh+.35;
+  cam.pos=p;cam.tgt=tg;}
+}
+const unS={},unG={};
+function U(prog,cache,name){return prog.u[name];}
+function render(){
+ const W=canvas.width,H=canvas.height;gl.viewport(0,0,W,H);
+ const fov=50*Math.PI/180,proj=M4.persp(fov,W/H,.15,5000),view=M4.look(cam.pos,cam.tgt,UP),vp=M4.mul(proj,view);
+ const focal=H/(2*Math.tan(fov/2));
+ const camR=[view[0],view[4],view[8]],camU=[view[1],view[5],view[9]],back=Nz([cam.pos[0]-cam.tgt[0],0,cam.pos[2]-cam.tgt[2]]);
+ const rh=Nz([camR[0],0,camR[2]]);const Ld=Nz(A(A(K(rh,-.72),[0,.6,0]),K(back,.3)));
+ const t=now/1000,wind=[t*.0045+3.3,t*.0018+1.7],sunW=Nz([-.42,.78,-.3]);
+ const womanIn=CH.x>SX0&&CH.x<SX1&&CH.z>SZ0&&CH.z<SZ1?1:0;
+ gl.bindTexture(gl.TEXTURE_2D,boneTex);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,MAXB*4,1,gl.RGBA,gl.FLOAT,boneData);
+ gl.clearColor(.07,.085,.06,1);gl.clearDepth(1);gl.depthMask(true);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+ const P=progS;gl.useProgram(P.p);const u=P.u;
+ gl.uniformMatrix4fv(u.uVP,false,vp);gl.uniform3fv(u.uCam,cam.pos);gl.uniform3fv(u.uCamR,camR);gl.uniform3fv(u.uCamU,camU);gl.uniform3fv(u.uL,Ld);gl.uniform3fv(u.uSunW,sunW);
+ gl.uniform2fv(u.uWind,wind);gl.uniform1f(u.uTime,t);gl.uniform1f(u.uFocal,focal);gl.uniform1f(u.uDensity,density);
+ gl.uniform1f(u.uMinPx,Math.max(3,H*.0062));gl.uniform1f(u.uMaxPx,H*.2);gl.uniform1f(u.uMaxGrow,14);gl.uniform1f(u.uWomanInt,womanIn);gl.uniform1f(u.uPearlR,PEARL_R);
+ gl.uniform3fv(u.uStudioWin,[SX0-.2,2.3,29]);
+ gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,boneTex);gl.uniform1i(u.uBones,0);gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,matTex);gl.uniform1i(u.uMats,1);
+ const draw=(v,layer,base)=>{if(!v.n||(DBG_MASK>>layer&1)===0)return;gl.uniform1i(u.uLayer,layer);gl.uniform1i(u.uLayerBase,base);gl.bindVertexArray(v.vao);gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,v.n);};
+ gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);gl.disable(gl.BLEND);
+ draw(VAOS.U,0,0);
+ gl.depthMask(false);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+ gl.uniform1f(u.uSkyUnder,1);draw(VAOS.S,5,0);gl.uniform1f(u.uSkyUnder,0);draw(VAOS.S,5,0);
+ gl.disable(gl.BLEND);gl.depthMask(true);
+ // grass & reeds around the camera
+ gl.useProgram(progG.p);const g=progG.u;
+ gl.uniformMatrix4fv(g.uVP,false,vp);gl.uniform3fv(g.uCam,cam.pos);gl.uniform3fv(g.uL,Ld);gl.uniform3fv(g.uSunW,sunW);gl.uniform2fv(g.uWind,wind);gl.uniform1f(g.uTime,t);gl.uniform1f(g.uFocal,focal);
+ const look=Nz(S(cam.tgt,cam.pos)),gc=[cam.pos[0]+look[0]*GN*GCELL*.25,cam.pos[2]+look[2]*GN*GCELL*.25];
+ gl.uniform2f(g.uGC,gc[0]/GCELL,gc[1]/GCELL);gl.uniform1i(g.uGN,GN);gl.uniform1f(g.uCell,GCELL);
+ if(cam.pos[1]<60){gl.bindVertexArray(emptyVAO);gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,GN*GN);}
+ gl.useProgram(P.p);
+ gl.enable(gl.BLEND);gl.depthMask(false);
+ draw(VAOS.RG,1,10);draw(VAOS.G,2,10);draw(VAOS.W,3,10);draw(VAOS.I,4,20);
+ gl.bindVertexArray(null);
+}
+function frame(ts){
+ const dt=Math.min(.1,(ts-last)/1000);last=ts;now=ts;
+ update(dt);resize();render();
+ // adaptive resolution + stroke density
+ fpsAcc+=dt;fpsN++;if(ts-fpsT>1000){fps=fpsN/fpsAcc;fpsAcc=0;fpsN=0;fpsT=ts;
+  if(QS.has('fixedq')){}else if(fps<34&&scale>.45){scale=Math.max(.45,scale*.86);density=Math.max(.55,density*.93);}
+  else if(fps>54&&(scale<1||density<1)){scale=Math.min(1,scale*1.06);density=Math.min(1,density*1.03);}
+  status.textContent=`${PH.kind==='Rapier'?'Rapier':'Built-in'} physics · ${(TOTAL/1e6).toFixed(2)}M strokes · ${fps.toFixed(0)} fps · ${(scale*100).toFixed(0)}% res`;}
+ requestAnimationFrame(frame);
+}
+const status=$('#status');let TOTAL=0;const DBG_MASK=QS.has('layers')?parseInt(QS.get('layers'),2):255;
+
+// ============================================================ start
+const rapierP=initRapier();
+(async()=>{
+ const base=await build();
+ VAOS={U:vaoFor(LU),RG:vaoFor(LRG),G:vaoFor(LG),W:vaoFor(LW),I:vaoFor(LI),S:vaoFor(LS)};
+ TOTAL=Object.values(VAOS).reduce((a,v)=>a+v.n,0)+GN*GN;
+ lmsg.textContent='Varnishing…';lbar.style.width='100%';
+ await Promise.race([rapierP,new Promise(r=>setTimeout(r,4000))]);
+ rapierP.then(()=>{if(PH.rap){PH.rap.body.setTranslation({x:CH.x,y:CH.y+.86,z:CH.z},true);}});
+ window.POD={ready:true,get physics(){return PH.kind;},physErr:()=>PH.err,checks:()=>PH.checks,counts:()=>Object.fromEntries(Object.entries(VAOS).map(([k,v])=>[k,v.n])),base,
+  state:()=>({x:CH.x,y:CH.y,z:CH.z,grounded:CH.grounded,speed:WS.speed,look:WS.look,idle:WS.idle,auto:WS.auto,autoS,fps,scale,density}),
+  tour:(t)=>{if(!tour.on)toggleTour();tour.t=t;},stopTour:()=>{if(tour.on)toggleTour();},
+  setCam:(yaw,pitch,dist)=>{cam.yaw=yaw;cam.pitch=pitch;cam.dist=dist;cam.lastDrag=now+1e9;},
+  teleport,setAuto,key:(c,v)=>{keys[c]=v;},jump:()=>{jumpReq=true;},ws:WS,ch:CH};
+ $('#load').style.opacity=0;setTimeout(()=>$('#load').remove(),900);
+ requestAnimationFrame(t=>{last=t;fpsT=t;frame(t);});
+})().catch(e=>{console.error(e);window.POD={ready:true,failed:String(e)};lmsg.textContent='Something went wrong while painting: '+e.message;});
+}
+</script>
+</body>
+</html>
